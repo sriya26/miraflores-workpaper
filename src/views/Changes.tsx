@@ -39,12 +39,9 @@ function Ledger() {
   }
   return (
     <>
-      <div className="grid g4 mb16">
-        <div className="card pad stat"><div className="lbl">Active adjustments</div><div className="big">{all.filter(isActive).length}</div></div>
-        <div className="card pad stat"><div className="lbl">Federal tax / balance effect</div><div className="big">{signed(t.fed)} <span className="small muted">/ {signed(t.fed + t.fedBalance)}</span></div></div>
-        <div className="card pad stat"><div className="lbl">California tax / balance effect</div><div className="big">{signed(t.ca)} <span className="small muted">/ {signed(t.ca + t.caBalance)}</span></div></div>
-        <div className="card pad stat"><div className="lbl">Awaiting partner</div><div className="big" style={{ color: pending.length ? 'var(--warn)' : undefined }}>{pending.length}</div></div>
-      </div>
+      <p className="ink2 mb16">
+        {all.filter(isActive).length} active adjustments. Together they change federal tax by <b>{signed(t.fed)}</b> (balance {signed(t.fed + t.fedBalance)}) and California tax by <b>{signed(t.ca)}</b> (balance {signed(t.ca + t.caBalance)}).{pending.length > 0 && <> <b style={{ color: 'var(--warn)' }}>{pending.length} await partner approval.</b></>}
+      </p>
       <div className="row mb12">
         <div className="pill-toggle">{[['active', 'Active'], ['pending', `Awaiting partner (${pending.length})`], ['reverted', 'Reverted / rejected'], ['all', 'All']].map(([k, l]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l}</button>)}</div>
         <span className="spacer" />

@@ -234,8 +234,8 @@ export function feedFor(ctx: ReturnType<typeof useCtx>, since?: string, quiet = 
 function Notifications() {
   const ctx = useCtx()
   const since = ctx.s.seen.get(ctx.user.id)
-  const feed = feedFor(ctx, since, true).filter(f => !f.mine)
   const mine = [...ctx.s.notes.values()].filter(n => n.status !== 'resolved' && (n.to === ctx.user.id || (n.to === ctx.user.role)))
+  const feed = feedFor(ctx, since, true).filter(f => !f.mine && !mine.some(n => f.go === `/people?n=${n.id}`))
   const count = feed.length + mine.length
   return (
     <Popover button={(_, t) => <button className="icon-btn" onClick={t} style={{ position: 'relative', fontSize: 17 }} title="What changed since I last looked">🔔{count > 0 && <span className="badge bad" style={{ position: 'absolute', top: -2, right: -6, padding: '0 5px', fontSize: 10 }}>{count}</span>}</button>}>

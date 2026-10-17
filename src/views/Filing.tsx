@@ -70,7 +70,7 @@ export function Filing() {
   }
   return (
     <div className="page">
-      <div className="page-head"><div className="grow"><h1>Review & filing</h1><p>Filing is gated: open findings, blocking review notes, unexplained variances, missing approvals and stale sign-offs all hold it. After acceptance the return freezes; later changes become an amendment on top.</p></div></div>
+      <div className="page-head"><div className="grow"><h1>Review & filing</h1><p>The return can't be filed while anything below is open. Once accepted it freezes; later changes become an amendment.</p></div></div>
       <div className="grid g-side">
         <div className="col gap16">
           <div className="card">

@@ -171,12 +171,12 @@ export function blockers(ctx: Ctx) {
   for (const n of ctx.s.notes.values()) if (n.blocking && n.status !== 'resolved') out.push({ kind: 'review note', text: n.subject, go: `/people?n=${n.id}` })
   const unexplained = ctx.variances.filter(v => ![...ctx.s.notes.values()].some(n => n.kind === 'variance' && n.refs.includes(v.key)))
   if (unexplained.length) out.push({ kind: 'variance', text: `${unexplained.length} change${unexplained.length > 1 ? 's' : ''} vs 2024 to explain (${unexplained.slice(0, 3).map(v => v.key).join(', ')}${unexplained.length > 3 ? '…' : ''})`, go: '/schedules/summary' })
-  for (const a of ctx.s.adjustments.values()) {
-    if (a.status !== 'active' || a.rejected) continue
+  const needPartner = [...ctx.s.adjustments.values()].filter(a => {
+    if (a.status !== 'active' || a.rejected) return false
     const e = ctx.eff.effects.get(a.id)
-    const big = e && (Math.abs(e.fed) > 1000 || Math.abs(e.ca) > 1000)
-    if (big && !a.approvals.some(x => x.level === 'partner')) out.push({ kind: 'approval', text: `Partner approval needed: ${a.lineKey} (${a.reason.slice(0, 60)}…)`, go: '/changes' })
-  }
+    return e && (Math.abs(e.fed) > 1000 || Math.abs(e.ca) > 1000) && !a.approvals.some(x => x.level === 'partner')
+  })
+  if (needPartner.length) out.push({ kind: 'approval', text: `${needPartner.length} adjustment${needPartner.length > 1 ? 's' : ''} over 1,000 of tax need partner approval`, go: '/changes' })
   for (const lv of ['preparer', 'reviewer'] as const) {
     const missing: string[] = [], reopened: string[] = []
     for (const ar of AREAS) {

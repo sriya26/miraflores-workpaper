@@ -260,14 +260,11 @@ export function Documents() {
   return (
     <div className="page">
       <div className="page-head">
-        <div className="grow"><h1>Documents</h1><p>Every document, where it landed, or why it didn't. Click any to see the page with each extracted value boxed.</p></div>
+        <div className="grow"><h1>Documents</h1><p>Every document and where it landed on the return — or why it didn't.</p></div>
       </div>
-      <div className="grid g4 mb12">
-        <div className="card pad stat"><div className="lbl">Received</div><div className="big">{received.length}<span className="muted small"> / {rows.length}</span></div></div>
-        <div className="card pad stat"><div className="lbl">Landed on the return</div><div className="big" style={{ color: 'var(--ok)' }}>{landed}</div></div>
-        <div className="card pad stat"><div className="lbl">Accounted for with a reason</div><div className="big">{disp}</div></div>
-        <div className="card pad stat"><div className="lbl">Need a disposition</div><div className="big" style={{ color: open ? 'var(--warn)' : undefined }}>{open}</div></div>
-      </div>
+      <p className="ink2 mb16" style={{ marginTop: -8 }}>
+        {received.length} of {rows.length} received · <b style={{ color: 'var(--ok)' }}>{landed} on the return</b> · {disp} accounted for with a reason · {open ? <b style={{ color: 'var(--warn)' }}>{open} need a reason</b> : 'none unaccounted for'}
+      </p>
       <div className="row mb8">
         <Tabs value={tab} onChange={setTab} tabs={[{ id: 'all', label: 'All' }, { id: 'open', label: `Not accounted for (${open})` }, { id: 'findings', label: 'With open findings' }, { id: 'late', label: 'Arrived late' }]} />
         <span className="spacer" />
@@ -275,17 +272,17 @@ export function Documents() {
       </div>
       <div className="card">
         <table className="t">
-          <thead><tr><th>Doc</th><th>Title</th><th>Received</th><th>Extraction</th><th>Where it landed</th><th className="num">Verified</th><th>Findings</th></tr></thead>
+          <thead><tr><th>Doc</th><th>Title</th><th>Received</th><th>Read</th><th>Where it landed</th><th className="num">Verified</th><th></th></tr></thead>
           <tbody>
             {filtered.map(({ d, u, verified, status }) => (
               <tr key={d.id} className="click" onClick={() => ctx.go(`/doc/${d.id}`)} style={{ opacity: d.received_at > ctx.clock ? 0.45 : 1 }}>
                 <td className="mono">{d.id}</td>
-                <td><div>{d.title}</div><div className="tiny muted">{d.document_type} · {d.belongs_to}</div></td>
+                <td>{d.title}</td>
                 <td className="nowrap small">{date(d.received_at)}</td>
-                <td><Badge tone={d.extraction.status === 'extracted' ? 'muted' : 'warn'}>{d.extraction.status}</Badge> <span className="tiny muted">{d.extraction.values}</span></td>
-                <td><Badge tone={status.tone}>{status.label}</Badge>{u.disp && <div className="tiny muted ellipsis" style={{ maxWidth: 220 }}>{u.disp.reason}</div>}</td>
+                <td className="small" style={{ color: d.extraction.status === 'extracted' ? 'var(--ink-3)' : 'var(--warn)' }}>{d.extraction.status === 'extracted' ? `${d.extraction.values} values` : d.extraction.status.replace('_', ' ')}</td>
+                <td className="small"><span style={{ color: status.tone === 'ok' ? 'var(--ink-2)' : status.tone === 'warn' ? 'var(--warn)' : 'var(--ink-3)' }}>{status.label}</span>{u.disp && <div className="tiny muted ellipsis" style={{ maxWidth: 240 }}>{u.disp.reason}</div>}</td>
                 <td className="num small">{u.evs.length ? `${verified}/${u.evs.length}` : '—'}</td>
-                <td>{u.checks.filter(c => c.status !== 'pass').map(c => <Badge key={c.id} tone="bad" title={c.title}>⚑</Badge>)}</td>
+                <td>{u.checks.some(c => c.status !== 'pass') && <span className="mark bad" title={u.checks.filter(c => c.status !== 'pass').map(c => c.title).join('\n')} />}</td>
               </tr>
             ))}
           </tbody>

@@ -47,7 +47,7 @@ function nextSteps(ctx: Ctx) {
     if (open.length > 4) out.push({ text: `${open.length - Math.min(4, open.filter(c => c.severity === 'high').length)} more findings`, sub: 'See all findings', go: '/findings' })
   }
   const bl = blockers(ctx).filter(b => b.kind !== 'finding' && b.kind !== 'approval')
-  for (const b of bl.slice(0, 3)) out.push({ text: b.text.charAt(0).toUpperCase() + b.text.slice(1), sub: 'Before filing', go: b.go || '/filing' })
+  for (const b of bl.filter(b => !out.some(o => o.go === b.go || o.text === b.text)).slice(0, 3)) out.push({ text: b.text.charAt(0).toUpperCase() + b.text.slice(1), sub: 'Before filing', go: b.go || '/filing' })
   return out.slice(0, 7)
 }
 
@@ -65,9 +65,14 @@ export function Overview() {
     <div className="page">
       <div className="page-head">
         <div className="grow">
-          <div className="small muted">Ngozi Okafor & Erik Lindqvist · married filing jointly · moved California → Texas July 15, 2025</div>
-          <h1 style={{ marginTop: 6 }}>2025 return</h1>
-          <p>{filed ? 'Filed and accepted.' : days > 0 ? `${days} days to the extended deadline (Oct 15, 2026).` : 'Past the extended deadline.'} Latest engine run {ctx.vix.v.version}, {date(ctx.vix.v.computed_at)}.</p>
+          <div className="small muted">2025 return · client CL-20417</div>
+          <h1 style={{ marginTop: 6, fontSize: 30 }}>Ngozi Okafor & Erik Lindqvist</h1>
+          <div className="facts">
+            <span><b>Married filing jointly</b></span>
+            <span>Moved <b>California → Texas</b> on July 15, 2025</span>
+            <span>Dependents <b>Ada</b> (19, UC Davis) and <b>Theo</b> (8)</span>
+          </div>
+          <p className="mt12">{filed ? 'Filed and accepted.' : days > 0 ? `${days} days to the extended deadline (Oct 15, 2026).` : 'Past the extended deadline.'} Latest engine run {ctx.vix.v.version}, {date(ctx.vix.v.computed_at)}.</p>
         </div>
       </div>
 
