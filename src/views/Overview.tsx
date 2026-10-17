@@ -1,8 +1,7 @@
 import React, { useMemo } from 'react'
 import { useCtx, blockers, findingState, signoffState, Ctx } from '../ctx'
-import { Badge, Avatar, Meter, Ref, Who } from '../ui'
 import { AREAS, areaOfLine } from '../areas'
-import { money, signed, date, ago, val } from '../format'
+import { money, date, ago } from '../format'
 import { feedFor } from '../App'
 import { seedDemo } from '../demo'
 import { resetAll } from '../store'
@@ -21,181 +20,111 @@ export function areaStats(ctx: Ctx, areaId: string) {
   return { checks, open, keys, verified, total: Math.max(total, verified), adjs, so, hours }
 }
 
+// Plain-language status for an area, from the reader's point of view.
+export function areaStatus(ctx: Ctx, id: string): { text: string; tone: '' | 'bad' | 'ok' | 'warn' } {
+  const st = areaStats(ctx, id)
+  if (st.open.length) return { text: `${st.open.length} to resolve`, tone: 'bad' }
+  if (st.so.reviewer.stale || st.so.preparer.stale) return { text: 'Changed after sign-off', tone: 'warn' }
+  if (st.so.reviewer.so) return { text: 'Reviewed', tone: 'ok' }
+  if (st.so.preparer.so) return { text: 'Ready for review', tone: '' }
+  return { text: 'Ready to sign off', tone: '' }
+}
+
+function nextSteps(ctx: Ctx) {
+  const r = ctx.user.role
+  const out: { text: string; sub?: string; go: string }[] = []
+  const open = ctx.checks.filter(c => findingState(ctx, c).open)
+  if (r === 'partner') {
+    const pend = [...ctx.s.adjustments.values()].filter(a => {
+      const e = ctx.eff.effects.get(a.id)
+      return a.status === 'active' && !a.rejected && e && (Math.abs(e.fed) > 1000 || Math.abs(e.ca) > 1000) && !a.approvals.some(x => x.level === 'partner')
+    })
+    if (pend.length) out.push({ text: `Approve ${pend.length} adjustment${pend.length > 1 ? 's' : ''} over 1,000 of tax`, sub: 'Firm rule: partner sign-off on large changes', go: '/changes' })
+  }
+  for (const n of ctx.s.notes.values()) if (n.status !== 'resolved' && n.to === ctx.user.id) out.push({ text: n.subject, sub: `${n.kind === 'review' ? 'Review note' : 'Question'} from ${ctx.userName(n.by)}`, go: `/people?n=${n.id}` })
+  if (r === 'preparer' || r === 'partner' || r === 'reviewer') {
+    for (const c of open.filter(c => c.severity === 'high').slice(0, 4)) out.push({ text: c.title, sub: 'Finding', go: `/findings?f=${c.id}` })
+    if (open.length > 4) out.push({ text: `${open.length - Math.min(4, open.filter(c => c.severity === 'high').length)} more findings`, sub: 'See all findings', go: '/findings' })
+  }
+  const bl = blockers(ctx).filter(b => b.kind !== 'finding' && b.kind !== 'approval')
+  for (const b of bl.slice(0, 3)) out.push({ text: b.text.charAt(0).toUpperCase() + b.text.slice(1), sub: 'Before filing', go: b.go || '/filing' })
+  return out.slice(0, 7)
+}
+
 export function Overview() {
   const ctx = useCtx()
-  const bl = useMemo(() => blockers(ctx), [ctx.s, ctx.eff, ctx.checks, ctx.variances])
+  const steps = useMemo(() => nextSteps(ctx), [ctx.s, ctx.eff, ctx.checks, ctx.user])
   const since = ctx.s.seen.get(ctx.user.id)
-  const feed = feedFor(ctx, since, true).filter(f => !f.mine).slice(0, 8)
+  const feed = feedFor(ctx, since, true).filter(f => !f.mine).slice(0, 5)
   const e = ctx.eff.summary, b = ctx.vix.v.summary
-  const due = '2026-10-15'
-  const days = Math.ceil((+new Date(due + 'T23:59:00Z') - +new Date(ctx.clock)) / 86400000)
+  const days = Math.ceil((+new Date('2026-10-15T23:59:00Z') - +new Date(ctx.clock)) / 86400000)
   const filed = ctx.s.filing.submissions.some(x => x.status === 'accepted' && x.jurisdiction === 'federal')
-  const myNotes = [...ctx.s.notes.values()].filter(n => n.status !== 'resolved' && n.to === ctx.user.id)
-  const pendingApprovals = [...ctx.s.adjustments.values()].filter(a => {
-    if (a.status !== 'active' || a.rejected) return false
-    const ef = ctx.eff.effects.get(a.id)
-    const big = ef && (Math.abs(ef.fed) > 1000 || Math.abs(ef.ca) > 1000)
-    return ctx.user.role === 'partner' ? big && !a.approvals.some(x => x.level === 'partner') : ctx.user.role === 'reviewer' ? !a.approvals.length && a.by !== ctx.user.id : false
-  })
   const empty = ctx.s.events.length === 0
+  const amt = (v: number) => (v > 0 ? 'Owe ' : 'Refund ') + money(Math.abs(v))
   return (
     <div className="page">
       <div className="page-head">
         <div className="grow">
-          <div className="small muted">Miraflores · client CL-20417 · married filing jointly · CA → TX on July 15, 2025</div>
-          <h1>Okafor-Lindqvist household — 2025 return</h1>
-          <p>
-            {filed ? 'Filed and accepted.' : days > 0 ? <>Extended due date {date(due)} — <b>{days} days</b> left.</> : 'Past the extended due date.'}{' '}
-            The engine's latest run is <b>{ctx.vix.v.version}</b> ({date(ctx.vix.v.computed_at)}): {ctx.vix.v.trigger}
-          </p>
+          <div className="small muted">Ngozi Okafor & Erik Lindqvist · married filing jointly · moved California → Texas July 15, 2025</div>
+          <h1 style={{ marginTop: 6 }}>2025 return</h1>
+          <p>{filed ? 'Filed and accepted.' : days > 0 ? `${days} days to the extended deadline (Oct 15, 2026).` : 'Past the extended deadline.'} Latest engine run {ctx.vix.v.version}, {date(ctx.vix.v.computed_at)}.</p>
         </div>
       </div>
 
       {empty && (
-        <div className="callout info mb16 row">
-          <div className="grow"><b>This is the packet exactly as delivered.</b> No one has worked on it yet. Every finding below was generated by independent checks. Work through it yourself, or load a scripted morning of work (preparer fixes, reviewer notes) to see the review flow.</div>
-          <button className="btn primary" onClick={() => seedDemo(ctx)}>Load demo work</button>
+        <div className="row small mb16" style={{ color: 'var(--ink-3)' }}>
+          <span className="grow">This is the packet as delivered — nobody has worked on it yet.</span>
+          <button className="btn sm" onClick={() => seedDemo(ctx)}>Load a morning of demo work</button>
         </div>
       )}
 
-      <div className="grid g-side">
-        <div className="col gap16">
-          <div className="card">
-            <div className="card-head"><h3 className="grow">The bottom line</h3><span className="small muted">engine {ctx.vix.v.version} vs. workpaper (engine + {ctx.eff.activeAdjustments.length} adjustments)</span></div>
-            <div className="card-body">
-              <table className="t">
-                <thead><tr><th></th><th className="num">Federal · engine</th><th className="num">Federal · workpaper</th><th className="num">California · engine</th><th className="num">California · workpaper</th></tr></thead>
-                <tbody>
-                  <SumRow label="Adjusted gross income" a={b.federal.agi} b={e.federal.agi} c={b.california.ca_agi} d={e.california.ca_agi} cLabel="CA AGI" />
-                  <SumRow label="Taxable income" a={b.federal.taxable_income} b={e.federal.taxable_income} />
-                  <SumRow label="Total tax" a={b.federal.total_tax} b={e.federal.total_tax} c={b.california.total_tax} d={e.california.total_tax} />
-                  <SumRow label="Payments" a={b.federal.payments} b={e.federal.payments} c={b.california.payments} d={e.california.payments} />
-                  <tr className="total">
-                    <td>Balance due / (refund)</td>
-                    <td className="num">{money(b.federal.balance_due)}</td><td className="num" style={{ color: 'var(--violet)' }}>{money(e.federal.balance_due)}</td>
-                    <td className="num">{money(b.california.balance_due)}</td><td className="num" style={{ color: 'var(--violet)' }}>{money(e.california.balance_due)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div className="tiny muted mt8">Workpaper tax = engine tax + each adjustment's change × the engine's per-dollar rate for its category (or the engine's own what-if result). Parentheses are refunds. Taxable income ignores knock-on deduction effects until the engine recomputes.</div>
+      <div className="hero">
+        {(['federal', 'california'] as const).map(j => {
+          const now = e[j].balance_due, eng = b[j].balance_due
+          return (
+            <div key={j}>
+              <div className="lbl">{j === 'federal' ? 'Federal' : 'California'}</div>
+              <div className="big">{amt(now)}</div>
+              <div className="was">{now !== eng ? <>The engine said {amt(eng).toLowerCase()}. <a href="#/changes">What changed</a></> : 'As computed by the engine — no adjustments yet.'}</div>
             </div>
-          </div>
-
-          <div className="card">
-            <div className="card-head"><h3 className="grow">Areas</h3><span className="small muted">findings · verified · sign-offs · time</span></div>
-            <div className="grid g2" style={{ padding: 14 }}>
-              {AREAS.map(a => <AreaCard key={a.id} id={a.id} />)}
-            </div>
-          </div>
-        </div>
-
-        <div className="col gap16">
-          <div className="card pad">
-            <div className="row"><h3 className="grow">Ready to file?</h3>{bl.length ? <Badge tone="bad">{bl.length} blockers</Badge> : <Badge tone="ok">ready</Badge>}</div>
-            <Meter parts={[{ v: ctx.checks.filter(c => !findingState(ctx, c).open).length, tone: 'ok' }, { v: ctx.checks.filter(c => findingState(ctx, c).open).length, tone: 'bad' }]} />
-            <div className="tiny muted mt8">{ctx.checks.filter(c => !findingState(ctx, c).open).length} of {ctx.checks.length} checks clear</div>
-            <div className="col gap4 mt12">
-              {bl.slice(0, 7).map((x, i) => <a key={i} href={'#' + (x.go || '/filing')} className="row small" style={{ color: 'var(--ink)' }}><Badge tone="muted">{x.kind}</Badge><span className="ellipsis grow">{x.text}</span></a>)}
-              {bl.length > 7 && <a href="#/filing" className="small">+{bl.length - 7} more →</a>}
-            </div>
-          </div>
-
-          {(myNotes.length > 0 || pendingApprovals.length > 0) && (
-            <div className="card pad">
-              <h3 className="mb8">Waiting on you</h3>
-              {pendingApprovals.slice(0, 6).map(a => <a key={a.id} href="#/changes" className="feed-item" style={{ color: 'var(--ink)' }}><Badge tone="warn">approve</Badge><span className="grow small">{a.lineKey}: {a.reason.slice(0, 70)}…</span></a>)}
-              {myNotes.map(n => <a key={n.id} href={`#/people?n=${n.id}`} className="feed-item" style={{ color: 'var(--ink)' }}><Badge tone={n.blocking ? 'bad' : 'warn'}>{n.kind.replace('_', ' ')}</Badge><span className="grow small">{n.subject}</span></a>)}
-            </div>
-          )}
-
-          <div className="card pad">
-            <div className="row mb8"><h3 className="grow">Since you last looked</h3>{feed.length > 0 && <button className="btn sm ghost" onClick={() => ctx.emit('seen', { at: new Date().toISOString() })}>Mark seen</button>}</div>
-            {feed.map((f, i) => (
-              <div key={i} className="feed-item" style={{ cursor: f.go ? 'pointer' : undefined }} onClick={() => f.go && ctx.go(f.go)}>
-                <Avatar id={f.who} name={ctx.userName(f.who)} size={22} />
-                <div className="grow small"><b>{ctx.userName(f.who)}</b> {f.text}<div className="tiny muted">{ago(f.at)}</div></div>
-              </div>
-            ))}
-            {!feed.length && <div className="small muted">Nothing new from others{since ? ` since ${new Date(since).toLocaleString()}` : ''}.</div>}
-            <NewInPacket />
-          </div>
-
-          <div className="card pad">
-            <h3 className="mb8">Team</h3>
-            {['preparer', 'reviewer', 'partner'].map(r => {
-              const id = ctx.ix.p.firm.assignment_at_start[r]
-              return <div key={r} className="row small" style={{ padding: '3px 0' }}><Avatar id={id} name={ctx.userName(id)} size={22} /><span className="grow">{ctx.userName(id)}</span><span className="muted">{r}</span></div>
-            })}
-            <div className="row small" style={{ padding: '3px 0' }}><Avatar id="st-04" name="Marcus Bell" size={22} /><span className="grow">Marcus Bell</span><span className="muted">preparer · joined 3/24 · masked</span></div>
-            {!empty && <button className="btn sm ghost mt8" onClick={() => { if (confirm('Erase all workpaper activity and return to the packet as delivered?')) resetAll() }}>Reset to packet as delivered</button>}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SumRow({ label, a, b, c, d, cLabel }: { label: string; a?: number; b?: number; c?: number; d?: number; cLabel?: string }) {
-  const diff = (x?: number, y?: number) => x != null && y != null && x !== y
-  return (
-    <tr>
-      <td>{label}{cLabel && <span className="tiny muted"> / {cLabel}</span>}</td>
-      <td className="num">{money(a)}</td>
-      <td className="num" style={{ color: diff(a, b) ? 'var(--violet)' : undefined, fontWeight: diff(a, b) ? 650 : undefined }}>{money(b)}</td>
-      <td className="num">{c != null ? money(c) : ''}</td>
-      <td className="num" style={{ color: diff(c, d) ? 'var(--violet)' : undefined, fontWeight: diff(c, d) ? 650 : undefined }}>{d != null ? money(d) : ''}</td>
-    </tr>
-  )
-}
-
-function AreaCard({ id }: { id: string }) {
-  const ctx = useCtx()
-  const a = AREAS.find(x => x.id === id)!
-  const st = areaStats(ctx, id)
-  const budget = a.budget ? ctx.ix.p.firm.budget_hours[a.budget] : undefined
-  const chip = (lv: string) => {
-    const x = st.so[lv]
-    if (!x.so) return <Badge tone="muted" title={`${lv}: not signed`}>{lv[0].toUpperCase()}</Badge>
-    if (x.stale) return <Badge tone="warn" title={`${lv} sign-off reopened: ${x.changes.slice(0, 4).join('; ')}`}>{lv[0].toUpperCase()} ⟳</Badge>
-    return <Badge tone="ok" title={`${lv}: ${ctx.userName(x.so.by)}`}>{lv[0].toUpperCase()} ✓</Badge>
-  }
-  return (
-    <a href={`#/area/${id}`} className="card pad" style={{ color: 'var(--ink)', boxShadow: 'none', textDecoration: 'none' }}>
-      <div className="row"><h3 className="grow">{a.name}</h3>{st.open.length > 0 ? <Badge tone="bad">{st.open.length} open</Badge> : <Badge tone="ok">clear</Badge>}</div>
-      <div className="tiny muted mt8" style={{ minHeight: 30 }}>{a.blurb}</div>
-      <div className="col gap4 mt8">
-        {a.headline.map(k => {
-          const le = ctx.eff.lines.get(k)
-          if (!le) return null
-          return <div key={k} className="row small"><span className="grow ellipsis ink2">{ctx.vix.lines.get(k)?.label}</span>{le.delta !== 0 && <span className="strike tiny">{val(le.base)}</span>}<b className="num">{val(le.value)}</b></div>
+          )
         })}
       </div>
-      <div className="mt12"><Meter parts={[{ v: st.verified, tone: 'ok' }, { v: Math.max(0, st.total - st.verified), tone: '' }]} /></div>
-      <div className="row mt8 tiny muted">
-        <span>{st.verified}/{st.total} verified</span>
-        {st.adjs.length > 0 && <span>· {st.adjs.length} adj.</span>}
-        {budget != null && <span>· {st.hours.toFixed(1)}/{budget}h</span>}
-        <span className="spacer" />
-        {chip('preparer')}{chip('reviewer')}
-      </div>
-    </a>
-  )
-}
 
-function NewInPacket() {
-  const ctx = useCtx()
-  // packet events visible at the clock in the last 21 days of season time
-  const from = new Date(+new Date(ctx.clock) - 21 * 86400000).toISOString()
-  const docs = ctx.ix.p.documents.filter(d => d.received_at > from && d.received_at <= ctx.clock)
-  const msgs = ctx.ix.p.client.messages.filter(m => m.sent_at > from && m.sent_at <= ctx.clock)
-  const vers = ctx.ix.p.return_versions.filter(v => v.computed_at > from && v.computed_at <= ctx.clock)
-  if (!docs.length && !msgs.length && !vers.length) return null
-  return (
-    <>
-      <h4 className="mt12 mb8">In the packet, last 3 weeks</h4>
-      {vers.map(v => <div key={v.version} className="row small" style={{ padding: '2px 0' }}><Badge tone="violet">{v.version}</Badge><span className="grow ellipsis">{v.trigger}</span><a href="#/changes?t=compare">diff</a></div>)}
-      {docs.map(d => <div key={d.id} className="row small" style={{ padding: '2px 0' }}><Badge>{d.id}</Badge><a className="grow ellipsis" href={`#/doc/${d.id}`}>{d.title}</a></div>)}
-      {msgs.map(m => <div key={m.id} className="row small" style={{ padding: '2px 0', cursor: 'pointer' }} onClick={() => ctx.setInspect(m.id)}><Badge tone="info">✉</Badge><span className="grow ellipsis">{m.text}</span></div>)}
-    </>
+      <div className="section-title">Next for you{steps.length > 0 && <span className="muted" style={{ fontWeight: 400 }}>{ctx.user.name}</span>}</div>
+      {steps.length ? (
+        <div className="todo">
+          {steps.map((s, i) => <a key={i} href={'#' + s.go}><span className="n">{i + 1}</span><span className="grow">{s.text}</span><span className="sub">{s.sub}</span></a>)}
+        </div>
+      ) : <div className="small muted">Nothing waiting on you.</div>}
+
+      <div className="section-title">The return<span className="spacer" /><a className="small" href="#/filing" style={{ fontWeight: 400 }}>Filing checklist →</a></div>
+      <table className="plain-table">
+        <tbody>
+          {AREAS.map(a => {
+            const st = areaStatus(ctx, a.id)
+            return (
+              <tr key={a.id} onClick={() => ctx.go(`/area/${a.id}`)}>
+                <td>{a.name}</td>
+                <td className="r" style={{ color: st.tone === 'bad' ? 'var(--bad)' : st.tone === 'ok' ? 'var(--ok)' : st.tone === 'warn' ? 'var(--warn)' : undefined }}>{st.text}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      {feed.length > 0 && (
+        <>
+          <div className="section-title">Since you last looked<span className="spacer" /><button className="btn sm ghost" onClick={() => ctx.emit('seen', { at: new Date().toISOString() })}>Mark seen</button></div>
+          {feed.map((f, i) => (
+            <div key={i} className="small" style={{ padding: '6px 0', cursor: f.go ? 'pointer' : undefined }} onClick={() => f.go && ctx.go(f.go)}>
+              <b>{ctx.userName(f.who)}</b> <span className="ink2">{f.text}</span> <span className="muted">· {ago(f.at)}</span>
+            </div>
+          ))}
+        </>
+      )}
+
+      {!empty && <div className="mt24"><button className="btn sm ghost" onClick={() => { if (confirm('Erase all workpaper activity and return to the packet as delivered?')) resetAll() }}>Reset to the packet as delivered</button></div>}
+    </div>
   )
 }

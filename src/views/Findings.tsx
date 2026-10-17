@@ -65,15 +65,12 @@ export function Findings({ focus }: { focus?: string }) {
       <div className="page-head">
         <div className="grow">
           <h1>Findings</h1>
-          <p>Independent checks read the source documents, client answers and agency records and recompute what the return should say. They don't trust the engine. A finding clears itself when the workpaper value matches.</p>
+          <p>Each check reads the documents and IRS/FTB records directly and recomputes what the return should say. A finding clears itself once the return matches.</p>
         </div>
       </div>
-      <div className="grid g4 mb16">
-        <div className="card pad stat"><div className="lbl">Open findings</div><div className="big" style={{ color: openCount ? 'var(--bad)' : 'var(--ok)' }}>{openCount}</div></div>
-        <div className="card pad stat"><div className="lbl">With a proposed fix</div><div className="big">{fixable.length}</div></div>
-        <div className="card pad stat"><div className="lbl">Federal effect of all fixes</div><div className="big">{signed(Math.round(totalEst.fed))}</div></div>
-        <div className="card pad stat"><div className="lbl">California effect of all fixes</div><div className="big">{signed(Math.round(totalEst.ca))}</div></div>
-      </div>
+      <p className="ink2 mb16" style={{ marginTop: -8 }}>
+        <b style={{ color: openCount ? 'var(--bad)' : 'var(--ok)' }}>{openCount} open</b>, {fixable.length} with a proposed fix. Applying all of them changes tax by <b>{signed(Math.round(totalEst.fed))}</b> federal and <b>{signed(Math.round(totalEst.ca))}</b> California.
+      </p>
       <div className="row mb8">
         <Tabs value={tab} onChange={setTab} tabs={[{ id: 'open', label: `Open (${openCount})` }, { id: 'fixable', label: `Fix proposed (${fixable.length})` }, { id: 'judgment', label: 'Needs judgment' }, { id: 'resolved', label: 'Resolved' }, { id: 'all', label: 'All' }]} />
         <span className="spacer" />
@@ -88,7 +85,7 @@ export function Findings({ focus }: { focus?: string }) {
           <span className="tiny muted">one batch · undo in one click</span>
         </div>
       )}
-      {filtered.map(({ c, st, est }) => <FindingCard key={c.id} c={c} st={st} est={est} selected={sel.has(c.id)} onSelect={v => { const n = new Set(sel); v ? n.add(c.id) : n.delete(c.id); setSel(n) }} focus={focus === c.id} />)}
+      {filtered.map(({ c, st, est }) => <FindingCard key={c.id} c={c} st={st} est={est} selected={sel.has(c.id)} onSelect={v => { const n = new Set(sel); v ? n.add(c.id) : n.delete(c.id); setSel(n) }} focus={focus === c.id} compact />)}
       {!filtered.length && <Empty>Nothing here.</Empty>}
       <div className="card mt24">
         <div className="card-head"><h3 className="grow">Engine diagnostics ({ctx.vix.v.version})</h3><span className="small muted">each one must be resolved or acknowledged</span></div>
@@ -138,13 +135,11 @@ export function FindingCard({ c, st, est, selected, onSelect, focus, compact }: 
         <div className="row">
           {onSelect && st.open && c.suggestions.length > 0 && ctx.can('adjust') && <input type="checkbox" checked={!!selected} onChange={e => onSelect(e.target.checked)} />}
           <h3 className="grow" style={{ cursor: 'pointer' }} onClick={() => setOpen(!open)}>{c.title}</h3>
-          <Badge tone={st.tone}>{st.label}</Badge>
+          <span className="small" style={{ color: st.tone === 'bad' ? 'var(--bad)' : st.tone === 'ok' ? 'var(--ok)' : st.tone === 'warn' ? 'var(--warn)' : 'var(--ink-3)' }}>{st.label}</span>
         </div>
-        <div className="row wrap gap4 mt8">
-          <Badge>{KIND_LABEL[c.kind]}</Badge>
-          {area && <a href={`#/area/${area.id}`}><Badge tone="info">{area.short}</Badge></a>}
-          <Badge tone={c.severity === 'high' ? 'bad' : c.severity === 'medium' ? 'warn' : 'muted'}>{c.severity}</Badge>
-          {(Math.round(est.fed) !== 0 || Math.round(est.ca) !== 0) && st.open && <span className="small muted">fix: federal <b>{signed(Math.round(est.fed))}</b> · CA <b>{signed(Math.round(est.ca))}</b></span>}
+        <div className="small muted mt8">
+          {KIND_LABEL[c.kind]}{area && <> · <a href={`#/area/${area.id}`} style={{ color: 'inherit' }}>{area.short}</a></>}
+          {(Math.round(est.fed) !== 0 || Math.round(est.ca) !== 0) && st.open && <> · fix changes tax <b style={{ color: 'var(--ink-2)' }}>{signed(Math.round(est.fed))}</b> federal, <b style={{ color: 'var(--ink-2)' }}>{signed(Math.round(est.ca))}</b> CA</>}
         </div>
         {open && (
           <>

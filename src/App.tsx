@@ -105,16 +105,15 @@ function TopBar({ onSearch, minimal }: { onSearch: () => void; minimal?: boolean
       {!minimal && (
         <div className="search" onClick={onSearch}>
           <span className="s-ico">⌕</span>
-          <input readOnly placeholder="Search lines, documents, values, notes…" />
+          <input readOnly placeholder="Search" />
           <span className="kbd" style={{ position: 'absolute', right: 8, top: 8 }}>⌘K</span>
         </div>
       )}
       <span className="spacer" />
       {ctx.user.role !== 'client' && ctx.user.role !== 'examiner' && (
-        <div className="bottomline" onClick={() => ctx.go('/changes?t=compare')} title="Engine result vs workpaper result">
+        <div className="bottomline" onClick={() => ctx.go('/changes?t=compare')} title={`Engine ${ctx.vix.v.version}: federal ${engFed > 0 ? 'owe' : 'refund'} ${money(Math.abs(engFed))}, California ${engCa > 0 ? 'owe' : 'refund'} ${money(Math.abs(engCa))}`}>
           <div><div className="lbl">Federal</div><div className="amt">{fed > 0 ? 'Owe ' : 'Refund '}{money(Math.abs(fed))}</div></div>
           <div><div className="lbl">California</div><div className="amt">{ca > 0 ? 'Owe ' : 'Refund '}{money(Math.abs(ca))}</div></div>
-          {(fed !== engFed || ca !== engCa) && <Badge tone="violet" title="Engine numbers before workpaper adjustments">engine {ctx.vix.v.version}: {engFed > 0 ? 'owe' : 'refund'} {money(Math.abs(engFed))} / {engCa > 0 ? 'owe' : 'refund'} {money(Math.abs(engCa))}</Badge>}
         </div>
       )}
       {ctx.can('replay') && <ClockControl />}
@@ -263,41 +262,41 @@ function Sidebar() {
   const ctx = useCtx()
   const path = ctx.route.split('?')[0]
   const openFindings = ctx.checks.filter(c => findingState(ctx, c).open).length
-  const openNotes = [...ctx.s.notes.values()].filter(n => n.status !== 'resolved').length
-  const bl = useMemo(() => blockers(ctx), [ctx.s, ctx.eff, ctx.checks])
-  const Item = ({ to, ico, label, count, bad }: any) => (
+  const inReturn = path.startsWith('/area/')
+  const moreRoutes = ['/schedules', '/changes', '/people', '/timeline', '/firm']
+  const [more, setMore] = useState(() => moreRoutes.some(r => path.startsWith(r)))
+  const [ret, setRet] = useState(true)
+  const Item = ({ to, label, count }: any) => (
     <a className={'nav-item' + (path === to || (to !== '/' && path.startsWith(to)) ? ' active' : '')} href={'#' + to}>
-      <span className="ico">{ico}</span>{label}{count != null && count > 0 && <span className={'count' + (bad ? ' bad' : '')}>{count}</span>}
+      {label}{count ? <span className="count">{count}</span> : null}
     </a>
   )
   return (
     <nav className="sidebar">
-      <Item to="/" ico="◎" label="Overview" />
-      <Item to="/findings" ico="⚑" label="Findings" count={openFindings} bad />
-      <Item to="/filing" ico="✈" label="Review & filing" count={bl.length} />
-      <div className="nav-sec">The return</div>
-      {AREAS.map(a => {
-        const st = signoffState(ctx, a.id) as any
-        const open = ctx.checks.filter(c => c.area === a.id && findingState(ctx, c).open).length
-        const tone = open ? 'bad' : st.reviewer.so && !st.reviewer.stale ? 'ok' : st.preparer.so && !st.preparer.stale ? 'info' : st.preparer.stale || st.reviewer.stale ? 'warn' : 'muted'
-        return (
-          <a key={a.id} className={'nav-item' + (path === `/area/${a.id}` ? ' active' : '')} href={`#/area/${a.id}`}>
-            <span className="ico"><span className={`dot ${tone}`} /></span>{a.short}{open > 0 && <span className="count bad">{open}</span>}
-          </a>
-        )
-      })}
-      <div className="nav-sec">Evidence & detail</div>
-      <Item to="/docs" ico="▤" label="Documents" />
-      <Item to="/schedules" ico="▦" label="Schedules" />
-      <Item to="/changes" ico="Δ" label="Adjustments & versions" count={[...ctx.s.adjustments.values()].filter(a => a.status === 'active').length} />
-      <div className="nav-sec">People</div>
-      <Item to="/people" ico="✎" label="Notes & questions" count={openNotes} />
-      <Item to="/timeline" ico="◷" label="Season timeline" />
-      <Item to="/firm" ico="⚙" label="Firm" />
-      <div className="nav-sec">Sync</div>
-      <div className="tiny muted" style={{ padding: '0 10px' }}>
-        {remoteStatus() === 'on' ? '● Shared store connected — edits sync to everyone.' : '● Saved in this browser; open another tab to work side by side.'}
-      </div>
+      <Item to="/" label="Overview" />
+      <Item to="/findings" label="Findings" count={openFindings} />
+      <button className={'nav-item' + (inReturn ? ' active-parent' : '')} onClick={() => setRet(!ret)}>The return<span className="caret">{ret ? '–' : '+'}</span></button>
+      {ret && (
+        <div className="nav-sub">
+          {AREAS.map(a => {
+            const open = ctx.checks.filter(c => c.area === a.id && findingState(ctx, c).open).length
+            return <a key={a.id} className={'nav-item' + (path === `/area/${a.id}` ? ' active' : '')} href={`#/area/${a.id}`}>{a.short}{open ? <span className="count">{open}</span> : null}</a>
+          })}
+        </div>
+      )}
+      <Item to="/docs" label="Documents" />
+      <Item to="/filing" label="Review & filing" />
+      <button className="nav-item" onClick={() => setMore(!more)}>More<span className="caret">{more ? '–' : '+'}</span></button>
+      {more && (
+        <div className="nav-sub">
+          <Item to="/schedules" label="Schedules" />
+          <Item to="/changes" label="Adjustments & versions" />
+          <Item to="/people" label="Notes & questions" />
+          <Item to="/timeline" label="Season timeline" />
+          <Item to="/firm" label="Firm settings" />
+        </div>
+      )}
+      <div className="nav-foot">{remoteStatus() === 'on' ? 'Synced for everyone' : 'Saved in this browser'}</div>
     </nav>
   )
 }
