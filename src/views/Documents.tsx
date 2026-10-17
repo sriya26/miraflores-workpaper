@@ -170,7 +170,7 @@ export function DocumentView({ id, page, hl }: { id: string; page: number; hl?: 
               ? <button className="btn sm" onClick={() => { if (!reveal) ctx.emit('access', { ref: id, what: `unmasked document page ${pg}` }); setReveal(!reveal) }}>{reveal ? 'Mask sensitive data' : '👁 Unmask (logged)'}</button>
               : <Badge tone="muted">sensitive data masked</Badge>)}
           </div>
-          {ctx.checks.filter(c => c.status === 'fail' && c.evidence.some(r => r === `doc:${id}#page${pg}` || r === id || evs.some(e => e.id === r))).map(c => (
+          {ctx.checks.filter(c => c.status === 'fail' && (c.evidence.some(r => r.startsWith(`doc:${id}#page`)) ? c.evidence.includes(`doc:${id}#page${pg}`) : c.evidence.some(r => r === id || evs.some(e => e.id === r)))).map(c => (
             <div key={c.id} className="callout bad small mb12 row"><span className="grow"><b>Finding on this page:</b> {c.title}</span><a href={`#/findings?f=${c.id}`}>Open →</a></div>
           ))}
           <DocPage doc={doc} page={pg} hl={focusId} onPick={setPick} reveal={reveal} mode={mode} />

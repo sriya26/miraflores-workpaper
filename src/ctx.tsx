@@ -169,23 +169,23 @@ export function blockers(ctx: Ctx) {
     if (st.open) out.push({ kind: 'finding', text: c.title, go: `/findings?f=${c.id}` })
   }
   for (const n of ctx.s.notes.values()) if (n.blocking && n.status !== 'resolved') out.push({ kind: 'review note', text: n.subject, go: `/people?n=${n.id}` })
-  for (const v of ctx.variances) {
-    const explained = [...ctx.s.notes.values()].some(n => n.kind === 'variance' && n.refs.includes(v.key))
-    if (!explained) out.push({ kind: 'variance', text: `Unexplained change vs 2024: ${v.label}`, go: '/schedules/summary', ref: v.key })
-  }
+  const unexplained = ctx.variances.filter(v => ![...ctx.s.notes.values()].some(n => n.kind === 'variance' && n.refs.includes(v.key)))
+  if (unexplained.length) out.push({ kind: 'variance', text: `${unexplained.length} change${unexplained.length > 1 ? 's' : ''} vs 2024 to explain (${unexplained.slice(0, 3).map(v => v.key).join(', ')}${unexplained.length > 3 ? '…' : ''})`, go: '/schedules/summary' })
   for (const a of ctx.s.adjustments.values()) {
     if (a.status !== 'active' || a.rejected) continue
     const e = ctx.eff.effects.get(a.id)
     const big = e && (Math.abs(e.fed) > 1000 || Math.abs(e.ca) > 1000)
     if (big && !a.approvals.some(x => x.level === 'partner')) out.push({ kind: 'approval', text: `Partner approval needed: ${a.lineKey} (${a.reason.slice(0, 60)}…)`, go: '/changes' })
   }
-  for (const ar of AREAS) {
-    const so = signoffState(ctx, ar.id)
-    for (const lv of ['preparer', 'reviewer'] as const) {
-      const x = (so as any)[lv]
-      if (!x.so) out.push({ kind: 'sign-off', text: `${ar.short}: ${lv} sign-off missing`, go: `/area/${ar.id}` })
-      else if (x.stale) out.push({ kind: 'sign-off', text: `${ar.short}: ${lv} sign-off reopened (${x.changes.length} change${x.changes.length > 1 ? 's' : ''})`, go: `/area/${ar.id}` })
+  for (const lv of ['preparer', 'reviewer'] as const) {
+    const missing: string[] = [], reopened: string[] = []
+    for (const ar of AREAS) {
+      const x = (signoffState(ctx, ar.id) as any)[lv]
+      if (!x.so) missing.push(ar.short)
+      else if (x.stale) reopened.push(ar.short)
     }
+    if (reopened.length) out.push({ kind: 'sign-off', text: `${lv} sign-off reopened: ${reopened.join(', ')}`, go: '/filing' })
+    if (missing.length) out.push({ kind: 'sign-off', text: `${lv} sign-off missing in ${missing.length} area${missing.length > 1 ? 's' : ''}${missing.length < AREAS.length ? ': ' + missing.join(', ') : ''}`, go: '/filing' })
   }
   const partner = [...ctx.s.signoffs].reverse().find(x => x.area === '_return' && x.level === 'partner' && !x.revoked)
   if (!partner) out.push({ kind: 'sign-off', text: 'Partner sign-off on the return', go: '/filing' })
