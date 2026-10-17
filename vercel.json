@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "headers": [{ "source": "/packet.json", "headers": [{ "key": "cache-control", "value": "public, max-age=3600" }] }]
+}
