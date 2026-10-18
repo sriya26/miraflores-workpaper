@@ -13,15 +13,15 @@ export interface Area {
 
 export const AREAS: Area[] = [
   { id: 'intake', name: 'Engagement & household', short: 'Intake', budget: 'intake_and_engagement', blurb: 'Engagement, consents, identity, dependents, residency.', headline: [], docs: ['D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D71'] },
-  { id: 'wages', name: 'Wages & stock compensation', short: 'Wages', budget: 'wages_and_stock_compensation', blurb: 'Two W-2s, RSU/ESPP sales, ISO exercise (AMT), excess social security.', headline: ['F1040.1z', 'F6251.2i', 'Sch3.11'], docs: ['D08', 'D09', 'D10', 'D11', 'D12', 'D13', 'D73'] },
-  { id: 'investments', name: 'Investments & digital assets', short: 'Investments', budget: 'investments_and_digital_assets', blurb: 'Three brokerages (302 sales), crypto, interest and dividends, foreign account.', headline: ['F1040.2b', 'F1040.3b', 'F1040.7'], docs: ['D28', 'D29', 'D30', 'D31', 'D32', 'D33', 'D34', 'D35', 'D36', 'D74'] },
-  { id: 'business', name: 'Lindqvist Studio (Schedule C)', short: 'Business', budget: 'business', blurb: 'Books to tax, 1099 matching, equipment, vehicle, home office, SE tax, SEP, QBI.', headline: ['SchC.1', 'SchC.31', 'Sch1.16'], docs: ['D14', 'D15', 'D16', 'D17', 'D18', 'D19', 'D20', 'D21', 'D22', 'D23', 'D24', 'D25', 'D26', 'D27'] },
-  { id: 'rentals', name: 'Rentals & the condo sale', short: 'Rentals', budget: 'rentals_and_sale', blurb: '1450 Fremont Way, the Austin condo, its sale (Form 4797), passive losses.', headline: ['SchE.21A', 'SchE.21B', 'F4797.25'], docs: ['D46', 'D47', 'D48', 'D49', 'D50', 'D51', 'D52', 'D53'] },
-  { id: 'passthrough', name: 'K-1s & basis', short: 'K-1s', budget: 'pass_throughs_and_basis', blurb: 'Woodworks S corp (basis gap), Ridgeline LP (late K-1).', headline: ['SchE.32', 'F7203.excess'], docs: ['D37', 'D38', 'D39', 'D40'] },
-  { id: 'retirement', name: 'Retirement, HSA & foreign', short: 'Retirement', budget: 'deductions_and_credits', blurb: 'Backdoor Roth (Form 8606), HSA, Swedish account (Form 8938, FBAR).', headline: ['F1040.4b', 'F8938.1.max'], docs: ['D41', 'D42', 'D43', 'D44', 'D45', 'D36'] },
-  { id: 'deductions', name: 'Deductions & credits', short: 'Deductions', budget: 'deductions_and_credits', blurb: 'Itemized deductions, gifts of stock and a car, child, education and care credits.', headline: ['SchA.17', 'F1040.19'], docs: ['D54', 'D55', 'D56', 'D57', 'D58', 'D59', 'D60', 'D61', 'D62', 'D63', 'D64', 'D65', 'D66'] },
+  { id: 'wages', name: 'Wages & stock compensation', short: 'Wages', budget: 'wages_and_stock_compensation', blurb: 'Forms W-2, stock compensation (RSU, ESPP, ISO and its AMT effect), excess social security.', headline: ['F1040.1z', 'F6251.2i', 'Sch3.11'], docs: ['D08', 'D09', 'D10', 'D11', 'D12', 'D13', 'D73'] },
+  { id: 'investments', name: 'Investments & digital assets', short: 'Investments', budget: 'investments_and_digital_assets', blurb: 'Brokerage and crypto sales, interest and dividends, foreign accounts.', headline: ['F1040.2b', 'F1040.3b', 'F1040.7'], docs: ['D28', 'D29', 'D30', 'D31', 'D32', 'D33', 'D34', 'D35', 'D36', 'D74'] },
+  { id: 'business', name: 'Business (Schedule C)', short: 'Business', budget: 'business', blurb: 'Books to tax, 1099 matching, equipment, vehicle, home office, SE tax, SEP, QBI.', headline: ['SchC.1', 'SchC.31', 'Sch1.16'], docs: ['D14', 'D15', 'D16', 'D17', 'D18', 'D19', 'D20', 'D21', 'D22', 'D23', 'D24', 'D25', 'D26', 'D27'] },
+  { id: 'rentals', name: 'Rentals & property sales', short: 'Rentals', budget: 'rentals_and_sale', blurb: 'Rental properties, sales of business property (Form 4797), passive losses.', headline: ['SchE.21A', 'SchE.21B', 'F4797.25'], docs: ['D46', 'D47', 'D48', 'D49', 'D50', 'D51', 'D52', 'D53'] },
+  { id: 'passthrough', name: 'K-1s & basis', short: 'K-1s', budget: 'pass_throughs_and_basis', blurb: 'Partnership and S corporation K-1s, stock basis and capital accounts.', headline: ['SchE.32', 'F7203.excess'], docs: ['D37', 'D38', 'D39', 'D40'] },
+  { id: 'retirement', name: 'Retirement, HSA & foreign', short: 'Retirement', budget: 'deductions_and_credits', blurb: 'IRAs and Roth conversions (Form 8606), HSA, foreign financial assets (Form 8938).', headline: ['F1040.4b', 'F8938.1.max'], docs: ['D41', 'D42', 'D43', 'D44', 'D45', 'D36'] },
+  { id: 'deductions', name: 'Deductions & credits', short: 'Deductions', budget: 'deductions_and_credits', blurb: 'Itemized deductions, charitable gifts, child, education and dependent-care credits.', headline: ['SchA.17', 'F1040.19'], docs: ['D54', 'D55', 'D56', 'D57', 'D58', 'D59', 'D60', 'D61', 'D62', 'D63', 'D64', 'D65', 'D66'] },
   { id: 'tax', name: 'Tax & payments', short: 'Tax & payments', budget: undefined, blurb: 'Tax computation, AMT, other taxes, estimates, extension, penalty.', headline: ['F1040.24', 'F1040.33', 'F1040.37'], docs: ['D67', 'D69', 'D70', 'D72'] },
-  { id: 'california', name: 'California part-year (540NR)', short: 'California', budget: 'california', blurb: 'Residency split at July 15, California-source income, CA payments.', headline: ['F540NR.32', 'F540NR.64', 'F540NR.97'], docs: ['D68'] },
+  { id: 'california', name: 'California (540NR)', short: 'California', budget: 'california', blurb: 'Residency split, California-source income, California payments.', headline: ['F540NR.32', 'F540NR.64', 'F540NR.97'], docs: ['D68'] },
 ]
 
 export const AREA_BY_ID = new Map(AREAS.map(a => [a.id, a]))
@@ -30,10 +30,9 @@ export function areaOfLine(key: string): string {
   const [form, ...rest] = key.split('.')
   const line = rest.join('.')
   if (form === 'F1040') {
-    if (/^1/.test(line)) return 'wages'
-    if (/^(2|3|7)/.test(line)) return 'investments'
-    if (/^4/.test(line)) return 'retirement'
-    if (line === '8' || line === '9' || line === '10' || line === '11') return 'tax'
+    if (/^1[a-z]$/.test(line)) return 'wages'
+    if (/^(2a|2b|3a|3b|7)$/.test(line)) return 'investments'
+    if (/^[456][a-z]$/.test(line)) return 'retirement'
     if (/^(12|13|14|19|20)$/.test(line)) return 'deductions'
     return 'tax'
   }

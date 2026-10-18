@@ -100,7 +100,7 @@ function TopBar({ onSearch, minimal }: { onSearch: () => void; minimal?: boolean
     <header className="topbar">
       <div className="brand">
         <div className="brand-mark">M</div>
-        <div>Okafor-Lindqvist<small>2025 · MFJ · CL-20417</small></div>
+        <div>{ctx.profile.shortName}<small>{ctx.profile.taxYear} · {ctx.profile.filingCode} · {ctx.profile.clientId}</small></div>
       </div>
       {!minimal && (
         <div className="search" onClick={onSearch}>
@@ -341,7 +341,7 @@ function Search({ onClose }: { onClose: () => void }) {
   }, [q])
   return (
     <Modal title="Search the workpaper" onClose={onClose} wide>
-      <input autoFocus placeholder="Try “1099-K”, “SchC.1”, “19,240”, “Theo”, “HVAC”…" value={q} onChange={e => setQ(e.target.value)} style={{ width: '100%', fontSize: 15, padding: 10 }} />
+      <input autoFocus placeholder="Try a form line (SchC.1), an amount (19,240), a name or a document" value={q} onChange={e => setQ(e.target.value)} style={{ width: '100%', fontSize: 15, padding: 10 }} />
       <div style={{ maxHeight: '55vh', overflowY: 'auto', marginTop: 10 }}>
         {results.map((r, i) => (
           <div key={i} className="feed-item" style={{ cursor: 'pointer' }} onClick={() => { if (r.ref) ctx.setInspect(r.ref); if (r.go) ctx.go(r.go); onClose() }}>

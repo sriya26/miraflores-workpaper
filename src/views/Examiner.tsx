@@ -16,7 +16,7 @@ interface PkgItem {
   table?: { label: string; amount: number; ref?: string }[]
 }
 
-export interface Package { notice: any; filed: any; preparer: string; items: PkgItem[]; generated: string; efile: any[] }
+export interface Package { names: string; year: number; notice: any; filed: any; preparer: string; items: PkgItem[]; generated: string; efile: any[] }
 
 export function buildResponsePackage(ctx: Ctx): Package {
   const notice = ctx.ix.p.tax_agency_records.notices.find((n: any) => n.id === 'N-2025-L566')
@@ -32,7 +32,7 @@ export function buildResponsePackage(ctx: Ctx): Package {
   const grKeys = ['SchC.1']
   const e = (id: string) => ctx.ix.evs.get(id)!.value
   return {
-    notice, filed: snap?.summary || ctx.eff.summary, preparer: 'Helen Strand, CPA (PTIN P00876543), Miraflores, EFIN 731504', generated: new Date().toISOString(),
+    names: ctx.profile.names, year: ctx.profile.taxYear, notice, filed: snap?.summary || ctx.eff.summary, preparer: 'Helen Strand, CPA (PTIN P00876543), Miraflores, EFIN 731504', generated: new Date().toISOString(),
     efile: ctx.s.filing.submissions,
     items: [
       {
@@ -71,7 +71,7 @@ export function ResponsePackage({ pkg }: { pkg: Package }) {
     const html = packageHtml(pkg)
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-    a.download = 'okafor-lindqvist-2025-letter566-response.html'
+    a.download = `${pkg.names.replace(/\W+/g, '-').toLowerCase()}-${pkg.year}-letter566-response.html`
     a.click()
   }
   return (
@@ -102,9 +102,9 @@ export function ResponsePackage({ pkg }: { pkg: Package }) {
 function esc(s: any) { return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]) }
 
 function packageHtml(pkg: Package) {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Letter 566 response — Okafor-Lindqvist 2025</title><style>body{font:14px/1.5 Georgia,serif;max-width:820px;margin:40px auto;padding:0 20px;color:#222}h1{font-size:22px}h2{font-size:17px;margin-top:28px;border-bottom:1px solid #ccc;padding-bottom:4px}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid #eee;padding:4px 6px;text-align:left}td.n{text-align:right;font-variant-numeric:tabular-nums}.m{color:#666;font-size:12px}</style></head><body>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Letter 566 response — ${esc(pkg.names)} ${pkg.year}</title><style>body{font:14px/1.5 Georgia,serif;max-width:820px;margin:40px auto;padding:0 20px;color:#222}h1{font-size:22px}h2{font-size:17px;margin-top:28px;border-bottom:1px solid #ccc;padding-bottom:4px}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid #eee;padding:4px 6px;text-align:left}td.n{text-align:right;font-variant-numeric:tabular-nums}.m{color:#666;font-size:12px}</style></head><body>
 <h1>Response to ${esc(pkg.notice.type)} — tax year 2025</h1>
-<p>Taxpayers: Ngozi Okafor and Erik Lindqvist (MFJ). Notice dated ${esc(pkg.notice.dated)}; response due ${esc(pkg.notice.response_due)}.<br>Representative: ${esc(pkg.preparer)}.<br>Return as filed: AGI ${money(pkg.filed.federal.agi)}; total tax ${money(pkg.filed.federal.total_tax)}.</p>
+<p>Taxpayers: ${esc(pkg.names)}. Notice dated ${esc(pkg.notice.dated)}; response due ${esc(pkg.notice.response_due)}.<br>Representative: ${esc(pkg.preparer)}.<br>Return as filed: AGI ${money(pkg.filed.federal.agi)}; total tax ${money(pkg.filed.federal.total_tax)}.</p>
 ${pkg.items.map((it, i) => `<h2>${i + 1}. ${esc(it.title)}</h2><p class="m">Item under examination: ${esc(it.question)}</p><p>${esc(it.answer)}</p>
 <table><tr><th>Line</th><th>As filed</th></tr>${it.lines.map(l => `<tr><td>${esc(l.key)} ${esc(l.label)}</td><td class="n">${esc(val(l.filed))}</td></tr>`).join('')}</table>
 ${it.table ? `<table>${it.table.map(r => `<tr><td>${esc(r.label)}</td><td class="n">${money(r.amount)}</td></tr>`).join('')}</table>` : ''}

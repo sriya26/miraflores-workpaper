@@ -109,7 +109,7 @@ function Status() {
         <thead><tr><th>Client</th><th>Return</th><th>Stage</th><th>Due</th><th className="num">Open findings</th><th className="num">Blockers</th><th className="num">Hours</th><th>Team</th></tr></thead>
         <tbody>
           <tr className="click" onClick={() => ctx.go('/')}>
-            <td>Okafor-Lindqvist <span className="tiny muted">CL-20417</span></td><td>2025 1040 + 540NR</td><td><Badge tone="info">{stage}</Badge></td><td>{date('2026-10-15')} (extended)</td>
+            <td>{ctx.profile.shortName} <span className="tiny muted">{ctx.profile.clientId}</span></td><td>2025 1040 + 540NR</td><td><Badge tone="info">{stage}</Badge></td><td>{date('2026-10-15')} (extended)</td>
             <td className="num">{open}</td><td className="num">{bl.length}</td><td className="num">{hours.toFixed(1)} / {budget}</td>
             <td className="row gap4">{['st-01', 'st-02', 'st-03'].map(id => <Avatar key={id} id={id} name={ctx.userName(id)} size={20} />)}</td>
           </tr>

@@ -8,6 +8,7 @@ import { runChecks, varianceFlags, CheckResult } from './checks'
 import { append, getEvents, subscribe } from './store'
 import { AREAS, areaOfLine } from './areas'
 import { hash, uid } from './format'
+import { buildProfile, documentAreas, Profile } from './profile'
 
 export interface Toast { id: string; text: string; kind?: 'ok' | 'error' | 'info'; undo?: () => void }
 
@@ -18,6 +19,9 @@ export interface Ctx {
   eff: Effective
   checks: CheckResult[]
   variances: ReturnType<typeof varianceFlags>
+  profile: Profile
+  docAreas: Map<string, string>
+  areaDocs: (areaId: string) => string[]
   users: User[]
   user: User
   setUserId: (id: string) => void
@@ -72,6 +76,9 @@ export function Provider({ ix, children }: { ix: Index; children: React.ReactNod
   const eff = useMemo(() => computeEffective(ix, vix, s), [ix, vix, s])
   const checks = useMemo(() => runChecks(ix, s, eff, clock), [ix, s, eff, clock])
   const variances = useMemo(() => varianceFlags(ix, eff, s.standards), [ix, eff, s.standards])
+  const profile = useMemo(() => buildProfile(ix), [ix])
+  // checks for the latest clock are stable enough for assignment; recompute only when the packet changes
+  const docAreas = useMemo(() => documentAreas(ix, checks), [ix, checks.length])
 
   const toast = useCallback((t: Omit<Toast, 'id'>) => {
     const id = uid('t')
@@ -106,7 +113,7 @@ export function Provider({ ix, children }: { ix: Index; children: React.ReactNod
   const userName = (id: string) => users.find(u => u.id === id)?.name || id
 
   const value: Ctx = {
-    ix, s, vix, eff, checks, variances, users, user, setUserId, clock, setClock, route, go, inspect, setInspect,
+    ix, s, vix, eff, checks, variances, profile, docAreas, areaDocs: (a: string) => ix.p.documents.filter(d => docAreas.get(d.id) === a).map(d => d.id), users, user, setUserId, clock, setClock, route, go, inspect, setInspect,
     emit, emitMany, toast, toasts, dismiss: id => setToasts(ts => ts.filter(x => x.id !== id)),
     can: a => can(user, a), frozen: !!s.filing.frozen, userName,
   }

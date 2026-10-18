@@ -244,7 +244,7 @@ export function Documents() {
     else if (u.lines.length) status = { label: `on ${u.lines.length} line${u.lines.length > 1 ? 's' : ''}`, tone: 'ok' }
     else if (u.disp) status = { label: u.disp.status.replace(/_/g, ' '), tone: 'info' }
     else status = { label: 'not on any line', tone: 'warn' }
-    const areaId = AREAS.find(a => a.docs.includes(d.id))?.id || ''
+    const areaId = ctx.docAreas.get(d.id) || ''
     return { d, u, verified, status, areaId }
   }), [ctx.s, ctx.vix, ctx.clock, ctx.checks])
   const filtered = rows.filter(r => (!area || r.areaId === area) && (

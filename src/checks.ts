@@ -54,6 +54,35 @@ function received(ix: Index, docId: string, clock: string): boolean {
   const d = ix.docs.get(docId)
   return !!d && d.received_at <= clock
 }
+// Generic lookups: checks find what they need by document type and field name, so they run on
+// any household's packet - not on this packet's ids.
+function docsOfType(ix: Index, clock: string, re: RegExp) {
+  return ix.p.documents.filter(d => re.test(d.document_type) && d.received_at <= clock)
+}
+function fieldIn(ix: Index, docId: string, re: RegExp) {
+  return (ix.evsByDoc.get(docId) || []).filter(e => re.test(e.field))
+}
+function docText(ix: Index, docId: string) {
+  return (ix.docs.get(docId)?.pages || []).map(p => p.printed_content).join(' ')
+}
+// Last day of residency in a state (for "was this item earned while a resident?")
+function residentUntil(ix: Index, state: string): string | null {
+  const r = (ix.p.household.residency || []).find((x: any) => x.state === state && x.status === 'resident')
+  return r ? r.to : null
+}
+export function dependentTins(ix: Index, s: State, clock: string) {
+  const prior = (ix.p.prior_years?.return_2024?.dependents || []) as { name: string; ssn: string }[]
+  return ix.p.household.people.filter((p: any) => p.role === 'dependent').map((p: any) => {
+    const ref = `household:${p.id}.ssn`
+    const current = s.corrections.get(ref)?.value || p.ssn
+    const card = ix.p.documents.filter(d => d.belongs_to === `dependent:${p.id}` && d.received_at <= clock)
+      .flatMap(d => (ix.evsByDoc.get(d.id) || []).filter(e => e.value_type === 'ssn'))[0]
+    const py = prior.find(x => x.name === p.name)
+    const pyEv = ix.p.extracted_values.find(e => e.value_type === 'ssn' && e.value === py?.ssn && ix.docs.get(e.document_id)?.document_type === 'prior_year_return')
+    const expected = card ? card.value : py?.ssn
+    return { person: p, ref, current, expected, card, pyEv, ok: !expected || expected === current }
+  })
+}
 
 export function runChecks(ix: Index, s: State, eff: Effective, clock: string): CheckResult[] {
   const out: CheckResult[] = []
@@ -65,73 +94,103 @@ export function runChecks(ix: Index, s: State, eff: Effective, clock: string): C
   // ---------- Wages ----------
   {
     // Distinct W-2s: same EIN and identical box values are images of the same form.
-    const w2 = ix.p.documents.filter(d => d.document_type === 'W-2' && d.received_at <= clock)
+    const w2 = docsOfType(ix, clock, /^W-2$/)
     const sig = (d: any) => (ix.evsByDoc.get(d.id) || []).filter(e => /^box/.test(e.field)).map(e => `${e.field}=${e.value}`).sort().join('|')
     const seen = new Map<string, string>()
     const dups: string[] = []
-    let box1 = 0
+    const distinct: string[] = []
+    let box1 = 0, ssWithheld = 0
     for (const d of w2) {
       const k = sig(d)
       if (seen.has(k)) { dups.push(`${d.id} duplicates ${seen.get(k)}`); continue }
-      seen.set(k, d.id)
+      seen.set(k, d.id); distinct.push(d.id)
       box1 += evByField(ix, d.id, 'box1')?.value || 0
+      ssWithheld += evVal(ix, s, evByField(ix, d.id, 'box4')?.id || '') || 0
     }
     push({
       id: 'w2-sum', area: 'wages', title: 'Wages agree to distinct Forms W-2', kind: 'recompute', severity: 'medium',
       status: near(L('F1040.1a'), box1) ? 'pass' : 'fail',
       summary: `Sum of box 1 over ${seen.size} distinct W-2s = ${box1.toLocaleString()}` + (dups.length ? `; ${dups.join(', ')} (identical boxes, counted once).` : '.'),
-      detail: ['W-2 matched on employer EIN and every box value; an exact image is a duplicate, not a second job.'],
-      expected: box1, actual: L('F1040.1a'), lines: ['F1040.1a'], evidence: ['ev-0016', 'ev-0035', 'ev-0052'], suggestions: [],
+      detail: ['W-2s matched on every box value; an exact image is a duplicate, not a second job.'],
+      expected: box1, actual: L('F1040.1a'), lines: ['F1040.1a'], evidence: w2.map(d => evByField(ix, d.id, 'box1')?.id).filter(Boolean) as string[], suggestions: [],
     })
-    // Excess social security
-    const ss = (evVal(ix, s, 'ev-0019') || 0) + (evVal(ix, s, 'ev-0038') || 0)
-    const max = Math.round(par.ss_wage_base * 0.062 * 100) / 100
-    const excess = Math.round(ss - max)
-    push({
-      id: 'excess-ss', area: 'wages', title: 'Excess social security recomputed', kind: 'recompute', severity: 'low',
-      status: near(L('Sch3.11'), excess) ? 'pass' : 'fail',
-      summary: `Withheld ${ss.toLocaleString()} across two employers − max ${max.toLocaleString()} (6.2% × ${par.ss_wage_base.toLocaleString()}) = ${excess.toLocaleString()}.`,
-      detail: [], expected: excess, actual: L('Sch3.11'), lines: ['Sch3.11'], evidence: ['ev-0019', 'ev-0038'], suggestions: [],
-    })
-    // ISO AMT
-    const iso = ((evVal(ix, s, 'ev-0078') || 0) - (evVal(ix, s, 'ev-0077') || 0)) * (evVal(ix, s, 'ev-0079') || 0)
-    push({
-      id: 'iso-amt', area: 'wages', title: 'ISO bargain element recomputed from Form 3921', kind: 'recompute', severity: 'low',
-      status: near(L('F6251.2i'), iso) ? 'pass' : 'fail',
-      summary: `(52.00 − 12.00) × 1,000 shares = ${iso.toLocaleString()}; shares still held at year end (qa-06), so it is an AMT adjustment.`,
-      detail: [], expected: iso, actual: L('F6251.2i'), lines: ['F6251.2i'], evidence: ['ev-0077', 'ev-0078', 'ev-0079', 'qa-06'], suggestions: [],
-    })
+    // Excess social security (only arises with more than one employer)
+    if (distinct.length > 1) {
+      const max = Math.round(par.ss_wage_base * 0.062 * 100) / 100
+      const excess = Math.max(0, Math.round(ssWithheld - max))
+      push({
+        id: 'excess-ss', area: 'wages', title: 'Excess social security recomputed', kind: 'recompute', severity: 'low',
+        status: near(L('Sch3.11') || 0, excess) ? 'pass' : 'fail',
+        summary: `Withheld ${ssWithheld.toLocaleString()} across ${distinct.length} employers − max ${max.toLocaleString()} (6.2% × ${par.ss_wage_base.toLocaleString()}) = ${excess.toLocaleString()}.`,
+        detail: [], expected: excess, actual: L('Sch3.11'), lines: ['Sch3.11'], evidence: distinct.map(d => evByField(ix, d, 'box4')?.id).filter(Boolean) as string[], suggestions: [],
+      })
+    }
+    // ISO bargain element from every Form 3921 (box 3 price, box 4 FMV, box 5 shares)
+    const f3921 = docsOfType(ix, clock, /^3921$/)
+    if (f3921.length) {
+      const parts = f3921.map(d => { const g = (b: string) => evVal(ix, s, evByField(ix, d.id, b)?.id || '') || 0; return { d, spread: (g('box4') - g('box3')) * g('box5'), refs: ['box3', 'box4', 'box5'].map(b => evByField(ix, d.id, b)?.id).filter(Boolean) as string[] } })
+      const iso = parts.reduce((a, x) => a + x.spread, 0)
+      push({
+        id: 'iso-amt', area: 'wages', title: 'ISO bargain element recomputed from Form 3921', kind: 'recompute', severity: 'low',
+        status: near(L('F6251.2i'), iso) ? 'pass' : 'fail',
+        summary: `(FMV at exercise − exercise price) × shares over ${f3921.length} Form${f3921.length > 1 ? 's' : ''} 3921 = ${iso.toLocaleString()}. Shares held at year end make it an AMT adjustment.`,
+        detail: [], expected: iso, actual: L('F6251.2i'), lines: ['F6251.2i'], evidence: parts.flatMap(x => x.refs), suggestions: [],
+      })
+    }
   }
 
-  // ---------- Stock comp sales: RSU basis ----------
-  if (received(ix, 'D11', clock)) {
-    const lots = [
-      { lot: 'F8949.B.N1', proceeds: 'ev-0497', basis: 'ev-0066', name: 'RSU-2502 (400 sh, Feb)', ca: true, cat: 'stcg' },
-      { lot: 'F8949.B.N3', proceeds: 'ev-0515', basis: 'ev-0068', name: 'RSU-2505 (400 sh, May)', ca: true, cat: 'stcg' },
-      { lot: 'F8949.E.N4', proceeds: 'ev-0524', basis: 'ev-0070', name: 'RSU-2308 (300 sh, Aug)', ca: false, cat: 'ltcg' },
-    ]
-    const bad = lots.filter(x => !near(L(x.lot), (evVal(ix, s, x.proceeds) || 0) - (evVal(ix, s, x.basis) || 0)))
-    const overstated = lots.reduce((a, x) => a + ((L(x.lot) || 0) - ((evVal(ix, s, x.proceeds) || 0) - (evVal(ix, s, x.basis) || 0))), 0)
-    push({
-      id: 'rsu-basis', area: 'investments', title: 'RSU sales taxed with zero basis (double taxation)', kind: 'engine_error', severity: 'high',
-      status: bad.length ? 'fail' : 'pass',
-      summary: bad.length
-        ? `Three Corvane RSU lots are reported at basis 0.00 (broker: noncovered, basis blank). The vest value was already taxed as W-2 wages (box 14 RSU 38,200). The supplemental statement D11 gives the adjusted basis. Gain overstated by ${Math.round(overstated).toLocaleString()}.`
-        : 'RSU lots carry the adjusted basis from the Corvane supplemental statement.',
-      detail: [
-        'Engine rule R-8949-LOT uses broker basis "unless a supplemental statement for the same lot is matched" — the match failed (lot ids N1/N3/N4 on the 1099-B vs RSU-2502/2505/2308 on D11; same shares, dates and quantities).',
-        'Report on Form 8949 with code B and the basis adjustment. Feb and May sales occurred during California residency (fully CA-source); the August sale after the move is prorated.',
-      ],
-      expected: Math.round(lots.reduce((a, x) => a + (evVal(ix, s, x.proceeds) || 0) - (evVal(ix, s, x.basis) || 0), 0)), actual: Math.round(lots.reduce((a, x) => a + (L(x.lot) || 0), 0)), lines: lots.map(l => l.lot), evidence: ['D11', 'ev-0066', 'ev-0068', 'ev-0070', 'ev-0027', 'ev-0498', 'ev-0516', 'ev-0525'],
-      suggestions: bad.map(x => {
-        const proceeds = evVal(ix, s, x.proceeds) || 0, basis = evVal(ix, s, x.basis) || 0
-        return {
-          lineKey: x.lot, newValue: proceeds - basis, fedCategory: x.cat, caCategory: x.ca ? 'ca_source_income' : x.cat,
-          reason: `${x.name}: basis ${basis.toLocaleString()} per Corvane supplemental statement (vest FMV already in W-2 wages); gain = ${proceeds.toLocaleString()} − ${basis.toLocaleString()}.`,
-          evidence: [x.basis, x.proceeds, 'ev-0027'],
-        }
-      }),
-    })
+  // ---------- Stock comp sales: zero broker basis with a supplemental statement ----------
+  // Any Form 8949 lot whose broker basis is 0 is matched (by acquisition date) to an adjusted
+  // basis on an employer supplemental statement. Typical for RSUs: the vest value is already wages.
+  {
+    const supp = docsOfType(ix, clock, /stock_plan_supplement/)
+    const adj = supp.flatMap(d => fieldIn(ix, d.id, /_acquired$/).map(acq => {
+      const id = acq.field.replace(/_acquired$/, '')
+      return { id, acquired: acq.value, basisEv: evByField(ix, d.id, `${id}_adjusted_basis`), doc: d.id }
+    })).filter(x => x.basisEv)
+    const caUntil = residentUntil(ix, 'CA')
+    const hits: { lot: string; proceedsEv: string; basisEv: string; zeroEv: string; name: string; cat: string; ca: boolean }[] = []
+    if (adj.length) for (const l of eff.version.v.lines) {
+      if (l.form !== 'F8949' || l.line.endsWith('total')) continue
+      const zero = (l.sources || []).map(r => ix.evs.get(r)).find(e => e && /_basis$/.test(e.field) && e.value === 0)
+      if (!zero) continue
+      const prefix = zero.field.replace(/_basis$/, '')
+      const acquired = evByField(ix, zero.document_id, `${prefix}_acquired`)?.value
+      const sold = evByField(ix, zero.document_id, `${prefix}_sold`)?.value
+      const proceeds = evByField(ix, zero.document_id, `${prefix}_proceeds`)
+      const m = adj.find(a => a.acquired === acquired)
+      if (!m || !proceeds) continue
+      const box = l.line.split('.')[0]
+      const cat = 'ABCGHI'.includes(box) ? 'stcg' : 'ltcg'
+      hits.push({ lot: l.key, proceedsEv: proceeds.id, basisEv: m.basisEv!.id, zeroEv: zero.id, name: m.id, cat, ca: !!caUntil && !!sold && sold <= caUntil })
+    }
+    if (hits.length) {
+      const gain = (h: typeof hits[0]) => (evVal(ix, s, h.proceedsEv) || 0) - (evVal(ix, s, h.basisEv) || 0)
+      const bad = hits.filter(h => !near(L(h.lot), gain(h)))
+      const expected = Math.round(hits.reduce((a, h) => a + gain(h), 0))
+      const actual = Math.round(hits.reduce((a, h) => a + (L(h.lot) || 0), 0))
+      const wagesRef = ix.p.extracted_values.find(e => /box14_RSU/i.test(e.field))
+      push({
+        id: 'rsu-basis', area: 'investments', title: 'Stock-comp sales taxed with zero basis (double taxation)', kind: 'engine_error', severity: 'high',
+        status: bad.length ? 'fail' : 'pass',
+        summary: bad.length
+          ? `${bad.length} lot${bad.length > 1 ? 's are' : ' is'} reported at broker basis 0.00 (noncovered), but the employer's supplemental statement gives an adjusted basis for the same shares (matched on acquisition date). The vest value was already taxed as wages${wagesRef ? ` (W-2 box 14 RSU ${Number(wagesRef.value).toLocaleString()})` : ''}. Gain overstated by ${(actual - expected).toLocaleString()}.`
+          : 'Lots with zero broker basis carry the adjusted basis from the supplemental statement.',
+        detail: [
+          'Engine rule R-8949-LOT uses broker basis unless it matches a supplemental statement for the same lot; lot ids differ between the 1099-B and the statement, so it never matched.',
+          'Report with Form 8949 code B. Sales while a California resident are fully California-source.',
+        ],
+        expected, actual, lines: hits.map(h => h.lot), evidence: [...new Set([...supp.map(d => d.id), ...hits.flatMap(h => [h.basisEv, h.zeroEv]), ...(wagesRef ? [wagesRef.id] : [])])],
+        suggestions: bad.map(h => {
+          const proceeds = evVal(ix, s, h.proceedsEv) || 0, basis = evVal(ix, s, h.basisEv) || 0
+          return {
+            lineKey: h.lot, newValue: proceeds - basis, fedCategory: h.cat, caCategory: h.ca ? 'ca_source_income' : h.cat,
+            reason: `${h.name}: adjusted basis ${basis.toLocaleString()} per the supplemental statement (vest value already in wages); gain = ${proceeds.toLocaleString()} − ${basis.toLocaleString()}.`,
+            evidence: [h.basisEv, h.proceedsEv, ...(wagesRef ? [wagesRef.id] : [])],
+          }
+        }),
+      })
+    }
   }
 
   // ---------- Meridian page 32 ----------
@@ -179,76 +238,124 @@ export function runChecks(ix: Index, s: State, eff: Effective, clock: string): C
 
   // ---------- Interest ----------
   {
-    const sweep = L('SchB.1.1'), bank = L('SchB.1.2')
-    const dup = near(sweep, 1840) && near(bank, 1840)
-    push({
-      id: 'interest-dup', area: 'investments', title: 'Northlake interest counted twice', kind: 'engine_error', severity: 'medium',
-      status: dup ? 'fail' : 'pass',
-      summary: 'The 1,840.00 bank-sweep interest on the Northlake composite (D28) and the separate Northlake Bank 1099-INT (D29) are the same interest: D29 states it is the sweep program for securities account ending 7731. Engine reports both.',
-      detail: ['Same payer family, same account, same amount. Keep one (the composite line) and record the duplicate disposition on D29.'],
-      expected: 6450 - 1840, actual: L('SchB.2'), lines: ['SchB.1.1', 'SchB.1.2', 'SchB.2'], evidence: ['ev-0492', 'ev-0538', 'D29'],
-      suggestions: dup ? [{ lineKey: 'SchB.1.2', newValue: 0, fedCategory: 'interest', reason: 'D29 is the same sweep interest already reported on the Northlake composite (D28, account 7731).', evidence: ['ev-0538', 'ev-0492'] }] : [],
-      estimate: { fed: -1840 * rates.interest.federal_per_dollar, ca: -1840 * rates.interest.california_per_dollar },
-    })
-    // FX
-    const sek = evVal(ix, s, 'ev-0960') || 0
-    const right = Math.round(sek / par.fx.SEK['2025_average'])
-    push({
-      id: 'fx-rate', area: 'investments', title: 'Swedish interest converted at the 2024 rate', kind: 'engine_error', severity: 'low',
-      status: near(L('SchB.1.6'), right) ? 'pass' : 'fail',
-      summary: `SEK ${sek.toLocaleString()} ÷ ${par.fx.SEK['2025_average']} (2025 average) = ${right.toLocaleString()} USD. Engine used the 2024 average (10.56) carried from last year's return → ${L('SchB.1.6')?.toLocaleString?.()}.`,
-      detail: ['Interest credited 12/31/2025; use the 2025 yearly average rate (or the spot rate on the date credited).'],
-      expected: right, actual: L('SchB.1.6'), lines: ['SchB.1.6'], evidence: ['ev-0960', 'ref:fx.SEK.2025_average', 'ref:fx.SEK.2024_average'],
-      suggestions: [{ lineKey: 'SchB.1.6', newValue: right, fedCategory: 'interest', reason: `Convert SEK ${sek.toLocaleString()} at the 2025 average rate ${par.fx.SEK['2025_average']} (engine used 2024's 10.56).`, evidence: ['ev-0960', 'ref:fx.SEK.2025_average'] }],
-    })
-    const maxUsd = Math.round((evVal(ix, s, 'ev-0962') || 0) / par.fx.SEK['2025_year_end'])
-    push({
-      id: 'fx-8938', area: 'retirement', title: 'Form 8938 maximum value recomputed', kind: 'recompute', severity: 'low',
-      status: near(L('F8938.1.max'), maxUsd) ? 'pass' : 'fail',
-      summary: `SEK 1,452,300 ÷ 9.71 (Treasury year-end) = ${maxUsd.toLocaleString()} USD; over the 100,000 threshold → Form 8938 required; FBAR (FinCEN 114) required separately.`,
-      detail: [], expected: maxUsd, actual: L('F8938.1.max'), lines: ['F8938.1.max'], evidence: ['ev-0962', 'ref:fx.SEK.2025_year_end'], suggestions: [],
-    })
+    // Two interest lines from different documents with the same amount and the same account
+    // number are one payment reported twice (e.g. a bank-sweep 1099-INT inside a composite 1099).
+    const payerLines = eff.version.v.lines.filter(l => l.form === 'SchB' && /^1\.\d+$/.test(l.line))
+    const srcDoc = (l: any) => (l.sources || []).map((r: string) => ix.evs.get(r)).find((e: any) => e)?.document_id as string | undefined
+    const acct = (d?: string) => new Set(d ? [...docText(ix, d).matchAll(/(?:ending|account) (\d{4})\b/gi)].map(m => m[1]) : [])
+    const dups: { keep: any; drop: any; amount: number; accounts: string[] }[] = []
+    for (let i = 0; i < payerLines.length; i++) for (let j = i + 1; j < payerLines.length; j++) {
+      const a = payerLines[i], b = payerLines[j]
+      const da = srcDoc(a), db = srcDoc(b)
+      if (!da || !db || da === db || !(a.value > 0) || a.value !== b.value) continue
+      const shared = [...acct(da)].filter(x => acct(db).has(x))
+      if (!shared.length) continue
+      // drop the stand-alone 1099-INT, keep the composite statement
+      const dropB = ix.docs.get(db)!.document_type === '1099-INT' || ix.docs.get(da)!.document_type !== '1099-INT'
+      dups.push({ keep: dropB ? a : b, drop: dropB ? b : a, amount: a.value, accounts: shared })
+    }
+    for (const d of dups) {
+      const still = near(L(d.keep.key), d.amount) && near(L(d.drop.key), d.amount)
+      const dropDoc = srcDoc(d.drop)!, keepDoc = srcDoc(d.keep)!
+      push({
+        id: 'interest-dup', area: 'investments', title: 'Same interest reported on two documents', kind: 'engine_error', severity: 'medium',
+        status: still ? 'fail' : 'pass',
+        summary: `${d.amount.toLocaleString()} of interest appears on ${keepDoc} (${ix.docs.get(keepDoc)!.document_type}) and again on ${dropDoc} (${ix.docs.get(dropDoc)!.document_type}) for the same account ending ${d.accounts.join(', ')}. The engine reports both.`,
+        detail: ['Matched on amount and account number across documents. Keep the composite statement; record the duplicate disposition on the other document.'],
+        expected: (L('SchB.2') || 0) - (still ? d.amount : 0), actual: L('SchB.2'), lines: [d.keep.key, d.drop.key, 'SchB.2'], evidence: [...(d.keep.sources || []), ...(d.drop.sources || []), dropDoc],
+        suggestions: still ? [{ lineKey: d.drop.key, newValue: 0, fedCategory: 'interest', reason: `${dropDoc} reports the same ${d.amount.toLocaleString()} already on ${keepDoc} (account ending ${d.accounts.join(', ')}).`, evidence: [...(d.drop.sources || []), ...(d.keep.sources || [])] }] : [],
+      })
+    }
+    // Foreign amounts must be converted at the tax year's rate, not one carried from a prior year.
+    const year = ix.p.household.tax_year
+    for (const l of eff.version.v.lines) {
+      const fxRef = (l.sources || []).find(r => r.startsWith('ref:fx.'))
+      if (!fxRef || l.key.startsWith('F8938')) continue
+      const [, cur, rateKey] = fxRef.slice(4).split('.')
+      if (rateKey.startsWith(String(year))) continue
+      const right = par.fx?.[cur]?.[`${year}_average`]
+      const amtEv = (l.sources || []).map(r => ix.evs.get(r)).find(e => e && e.value_type === 'money')
+      if (!right || !amtEv) continue
+      const foreign = evVal(ix, s, amtEv.id) || 0
+      const usd = Math.round(foreign / right)
+      push({
+        id: 'fx-rate', area: 'investments', title: `${cur} amount converted at a prior-year rate`, kind: 'engine_error', severity: 'low',
+        status: near(L(l.key), usd) ? 'pass' : 'fail',
+        summary: `${cur} ${foreign.toLocaleString()} ÷ ${right} (${year} average) = ${usd.toLocaleString()} USD. The engine used ${rateKey.replace('_', ' ')} (${par.fx[cur][rateKey]}), carried from last year → ${L(l.key)?.toLocaleString?.()}.`,
+        detail: [`Use the ${year} yearly average (or the spot rate on the date received).`],
+        expected: usd, actual: L(l.key), lines: [l.key], evidence: [amtEv.id, `ref:fx.${cur}.${year}_average`, fxRef],
+        suggestions: [{ lineKey: l.key, newValue: usd, fedCategory: 'interest', reason: `Convert ${cur} ${foreign.toLocaleString()} at the ${year} average rate ${right} (engine used ${rateKey.replace('_', ' ')}).`, evidence: [amtEv.id, `ref:fx.${cur}.${year}_average`] }],
+      })
+    }
+    const max8938 = eff.version.lines.get('F8938.1.max')
+    const maxEv = max8938 && (max8938.sources || []).map(r => ix.evs.get(r)).find(e => e && e.value_type === 'money')
+    const maxRef = max8938 && (max8938.sources || []).find(r => r.startsWith('ref:fx.'))
+    if (maxEv && maxRef) {
+      const [, cur, rk] = maxRef.slice(4).split('.')
+      const maxUsd = Math.round((evVal(ix, s, maxEv.id) || 0) / par.fx[cur][rk])
+      push({
+        id: 'fx-8938', area: 'retirement', title: 'Form 8938 maximum value recomputed', kind: 'recompute', severity: 'low',
+        status: near(L('F8938.1.max'), maxUsd) ? 'pass' : 'fail',
+        summary: `${cur} ${(evVal(ix, s, maxEv.id) || 0).toLocaleString()} ÷ ${par.fx[cur][rk]} (Treasury year-end) = ${maxUsd.toLocaleString()} USD. Over the reporting threshold, so Form 8938 is required; FBAR (FinCEN 114) is filed separately.`,
+        detail: [], expected: maxUsd, actual: L('F8938.1.max'), lines: ['F8938.1.max'], evidence: [maxEv.id, maxRef], suggestions: [],
+      })
+    }
   }
 
   // ---------- Schedule C ----------
   {
-    const books = evVal(ix, s, 'ev-0103') || 0
-    const nec = ['ev-0113', 'ev-0116', 'ev-0119', 'ev-0122', 'ev-0125'].reduce((a, id) => a + (evVal(ix, s, id) || 0), 0)
-    const k = evVal(ix, s, 'ev-0127') || 0
-    const viaPaywell = evVal(ix, s, 'ev-0109') || 0
-    const small = evVal(ix, s, 'ev-0111') || 0
-    const expected = books
-    push({
-      id: 'gross-1099k', area: 'business', title: 'Form 1099-K amount added on top of books (double counted)', kind: 'engine_error', severity: 'high',
-      status: near(L('SchC.1'), expected) ? 'pass' : 'fail',
-      summary: `Books revenue ${books.toLocaleString()} already includes the ${k.toLocaleString()} card payments: the transaction detail (D15) shows Atlas Outdoor Gear paid 41,200, of which ${viaPaywell.toLocaleString()} came through Paywell. Engine added the 1099-K again → ${L('SchC.1')?.toLocaleString()}.`,
-      detail: [
-        `Reconciliation: Forms 1099-NEC ${nec.toLocaleString()} + clients without a 1099 ${small.toLocaleString()} = ${(nec + small).toLocaleString()} = books ${books.toLocaleString()}.`,
-        `The 1099-K (${k.toLocaleString()}) overlaps Atlas's 1099-NEC (41,200 includes the card payments). Keep this reconciliation: an examiner matching third-party forms will see 142,000 + 12,400.`,
-      ],
-      expected, actual: L('SchC.1'), lines: ['SchC.1'], evidence: ['ev-0103', 'ev-0109', 'ev-0110', 'ev-0127', 'ev-0111', 'ev-0116'],
-      suggestions: [{ lineKey: 'SchC.1', newValue: expected, fedCategory: 'schc_profit', reason: `1099-K ${k.toLocaleString()} is Atlas Outdoor Gear card payments already deposited and booked (D15); also on Atlas's 1099-NEC. Gross receipts = books ${books.toLocaleString()}.`, evidence: ['ev-0109', 'ev-0110', 'ev-0127', 'ev-0103'] }],
-      estimate: { fed: -k * rates.schc_profit.federal_per_dollar, ca: -k * rates.schc_profit.california_per_dollar },
-    })
-    // Mileage
-    const doc = ix.docs.get('D23')!
-    const trips = doc.pages.map(p => [...p.printed_content.matchAll(/(\d{4}-\d{2}-\d{2}) ([^;]*?) (\d+) mi/g)].map(m => `${m[1]}|${m[2]}|${m[3]}`).join(';'))
-    const dupPages: number[] = []
-    trips.forEach((t, i) => { if (trips.indexOf(t) !== i) dupPages.push(i + 1) })
-    const pageTotals = (ix.evsByDoc.get('D23') || []).filter(e => e.field === 'page_total')
-    const miles = pageTotals.filter(e => !dupPages.includes(e.page)).reduce((a, e) => a + (evVal(ix, s, e.id) || 0), 0)
-    const carExp = Math.round(miles * par.mileage_rate)
-    push({
-      id: 'mileage-dup', area: 'business', title: 'Mileage log page scanned twice', kind: 'extraction_error', severity: 'medium',
-      status: near(L('SchC.44a'), miles) && near(L('SchC.9'), carExp) ? 'pass' : 'fail',
-      summary: `Page ${dupPages.join(', ')} of the mileage log repeats page ${dupPages.map(p => trips.indexOf(trips[p - 1]) + 1).join(', ')} trip for trip ("second scan of the May-Aug sheet"). Business miles = ${miles.toLocaleString()}, not ${L('SchC.44a')?.toLocaleString()}; car expense ${miles.toLocaleString()} × ${par.mileage_rate} = ${carExp.toLocaleString()}.`,
-      detail: [`Odometer: ${(evVal(ix, s, 'ev-0479') - evVal(ix, s, 'ev-0478')).toLocaleString()} total miles; business use ${Math.round(miles / (evVal(ix, s, 'ev-0479') - evVal(ix, s, 'ev-0478')) * 100)}%.`, 'Check: pages compared trip-by-trip (date, destination, miles), not by page total.'],
-      expected: miles, actual: L('SchC.44a'), lines: ['SchC.44a', 'SchC.9'], evidence: ['ev-0226', 'ev-0315', 'ev-0404', 'ev-0477', 'doc:D23#page3'],
-      suggestions: [
-        { lineKey: 'SchC.44a', newValue: miles, fedCategory: 'none', reason: `Exclude duplicate scan (page ${dupPages.join(', ')}) of the May-Aug log sheet.`, evidence: ['ev-0404', 'ev-0315'] },
-        { lineKey: 'SchC.9', newValue: carExp, fedCategory: 'schc_profit', reason: `${miles.toLocaleString()} business miles × ${par.mileage_rate} standard rate.`, evidence: ['ev-0226', 'ev-0315', 'ev-0477', 'ref:param.mileage_rate'] },
-      ],
-    })
+    // Form 1099-K amounts that already sit inside the books (the deposit detail shows the same
+    // amount) must not be added to gross receipts again.
+    const booksDoc = docsOfType(ix, clock, /^books_profit_loss$/)[0]
+    const booksEv = booksDoc && fieldIn(ix, booksDoc.id, /^total_income$/)[0]
+    const k1099 = docsOfType(ix, clock, /^1099-K$/).flatMap(d => fieldIn(ix, d.id, /^box1a$/))
+    const detail = docsOfType(ix, clock, /books_transaction_detail/).flatMap(d => ix.evsByDoc.get(d.id) || [])
+    const necs = docsOfType(ix, clock, /^1099-NEC$/).flatMap(d => fieldIn(ix, d.id, /^box1$/))
+    if (booksEv && k1099.length) {
+      const books = evVal(ix, s, booksEv.id) || 0
+      const k = k1099.reduce((a, e) => a + (evVal(ix, s, e.id) || 0), 0)
+      const inBooks = detail.find(e => e.value_type === 'money' && near(e.value, k, 0.5))
+      const overlapNec = necs.find(n => detail.some(e => e.value_type === 'money' && near(e.value, n.value, 0.5)))
+      const overlapPayer = overlapNec ? ix.docs.get(overlapNec.document_id)!.issuer : undefined
+      const nec = necs.reduce((a, e) => a + (evVal(ix, s, e.id) || 0), 0)
+      const noForm = detail.find(e => /unreported|no.?1099|without/i.test(e.field + ' ' + e.label))
+      const small = noForm ? evVal(ix, s, noForm.id) || 0 : 0
+      if (inBooks) push({
+        id: 'gross-1099k', area: 'business', title: 'Form 1099-K amount added on top of books (double counted)', kind: 'engine_error', severity: 'high',
+        status: near(L('SchC.1'), books) ? 'pass' : 'fail',
+        summary: `Books revenue ${books.toLocaleString()} already includes the ${k.toLocaleString()} of card payments: the deposit detail shows the same ${k.toLocaleString()} received${overlapPayer ? ` from ${overlapPayer}` : ''}. The engine added the 1099-K again → ${L('SchC.1')?.toLocaleString()}.`,
+        detail: [
+          ...(noForm ? [`Reconciliation: Forms 1099-NEC ${nec.toLocaleString()} + clients without a 1099 ${small.toLocaleString()} = ${(nec + small).toLocaleString()} vs books ${books.toLocaleString()}.`] : []),
+          ...(overlapPayer ? [`The 1099-K overlaps ${overlapPayer}'s Form 1099-NEC, which also includes the card payments. Keep this reconciliation for any third-party matching notice.`] : []),
+        ],
+        expected: books, actual: L('SchC.1'), lines: ['SchC.1'], evidence: [booksEv.id, inBooks.id, ...k1099.map(e => e.id), ...(noForm ? [noForm.id] : []), ...(overlapNec ? [overlapNec.id] : [])],
+        suggestions: [{ lineKey: 'SchC.1', newValue: books, fedCategory: 'schc_profit', reason: `Form 1099-K ${k.toLocaleString()} is card receipts already deposited and booked (deposit detail)${overlapPayer ? `; also on ${overlapPayer}'s 1099-NEC` : ''}. Gross receipts = books ${books.toLocaleString()}.`, evidence: [inBooks.id, ...k1099.map(e => e.id), booksEv.id] }],
+      })
+    }
+    // Mileage logs: pages are compared trip by trip, so a page scanned twice is caught even
+    // though its page total looks legitimate.
+    for (const doc of docsOfType(ix, clock, /mileage_log/)) {
+      const trips = doc.pages.map(p => [...p.printed_content.matchAll(/(\d{4}-\d{2}-\d{2}) ([^;]*?) (\d+) mi/g)].map(m => `${m[1]}|${m[2]}|${m[3]}`).join(';'))
+      const dupPages: number[] = []
+      trips.forEach((t, i) => { if (t && trips.indexOf(t) !== i) dupPages.push(i + 1) })
+      const pageTotals = fieldIn(ix, doc.id, /^page_total$/)
+      const miles = pageTotals.filter(e => !dupPages.includes(e.page)).reduce((a, e) => a + (evVal(ix, s, e.id) || 0), 0)
+      const carExp = Math.round(miles * par.mileage_rate)
+      const o0 = fieldIn(ix, doc.id, /^odometer_start$/)[0], o1 = fieldIn(ix, doc.id, /^odometer_end$/)[0]
+      const driven = o0 && o1 ? (evVal(ix, s, o1.id) || 0) - (evVal(ix, s, o0.id) || 0) : 0
+      if (!dupPages.length && near(L('SchC.44a'), miles)) continue
+      push({
+        id: 'mileage-dup', area: 'business', title: 'Mileage log page scanned twice', kind: 'extraction_error', severity: 'medium',
+        status: near(L('SchC.44a'), miles) && near(L('SchC.9'), carExp) ? 'pass' : 'fail',
+        summary: `Page ${dupPages.join(', ')} of the mileage log repeats page ${dupPages.map(p => trips.indexOf(trips[p - 1]) + 1).join(', ')} trip for trip. Business miles = ${miles.toLocaleString()}, not ${L('SchC.44a')?.toLocaleString()}; car expense ${miles.toLocaleString()} × ${par.mileage_rate} = ${carExp.toLocaleString()}.`,
+        detail: [...(driven ? [`Odometer: ${driven.toLocaleString()} total miles; business use ${Math.round(miles / driven * 100)}%.`] : []), 'Pages compared trip by trip (date, destination, miles), not by page total.'],
+        expected: miles, actual: L('SchC.44a'), lines: ['SchC.44a', 'SchC.9'], evidence: [...pageTotals.map(e => e.id), ...dupPages.map(p => `doc:${doc.id}#page${p}`)],
+        suggestions: [
+          { lineKey: 'SchC.44a', newValue: miles, fedCategory: 'none', reason: `Exclude the duplicate scan (page ${dupPages.join(', ')}) of the mileage log.`, evidence: pageTotals.filter(e => dupPages.includes(e.page)).map(e => e.id) },
+          { lineKey: 'SchC.9', newValue: carExp, fedCategory: 'schc_profit', reason: `${miles.toLocaleString()} business miles × ${par.mileage_rate} standard rate.`, evidence: [...pageTotals.filter(e => !dupPages.includes(e.page)).map(e => e.id), 'ref:param.mileage_rate'] },
+        ],
+      })
+    }
     // Utilities
     const phone = evVal(ix, s, 'ev-0101') || 0, net = evVal(ix, s, 'ev-0095') || 0
     const util = Math.round(phone * 0.7 + net * 0.5)
@@ -340,16 +447,24 @@ export function runChecks(ix: Index, s: State, eff: Effective, clock: string): C
 
   // ---------- Deductions ----------
   {
-    const veh = L('F8283.A1.vehicle') || 0
-    const proceeds = evVal(ix, s, 'ev-1054') || 0
-    push({
-      id: 'vehicle-donation', area: 'deductions', title: 'Car donation deducted at Blue Book value', kind: 'client_answer', severity: 'medium',
-      status: veh <= proceeds ? 'pass' : 'fail',
-      summary: `Form 1098-C box 4a: the charity sold the Subaru (09/09/2025) for ${proceeds.toLocaleString()}. Deduction is limited to gross proceeds (IRC 170(f)(12)); the client's "about 6,000" Blue Book estimate (qa-39) does not apply.`,
-      detail: ['Item under IRS examination in 2028 (Letter 566): keep the 1098-C with Form 8283.'],
-      expected: proceeds, actual: veh, lines: ['F8283.A1.vehicle', 'SchA.12'], evidence: ['ev-1054', 'D66', 'qa-39', 'call-01'],
-      suggestions: [{ lineKey: 'F8283.A1.vehicle', newValue: proceeds, fedCategory: 'itemized', reason: `Limited to gross proceeds ${proceeds.toLocaleString()} on Form 1098-C box 4c (vehicle sold by the charity); IRC 170(f)(12).`, evidence: ['ev-1054', 'D66'] }],
-    })
+    // Donated vehicles: the deduction is limited to the charity's gross proceeds (Form 1098-C box 4c).
+    for (const d of docsOfType(ix, clock, /^1098-C$/)) {
+      const pEv = fieldIn(ix, d.id, /^box4c$/)[0]
+      const evIds = new Set((ix.evsByDoc.get(d.id) || []).map(e => e.id))
+      const line = eff.version.v.lines.find(l => l.form === 'F8283' && (l.sources || []).some(r => evIds.has(r)))
+      if (!pEv || !line) continue
+      const proceeds = evVal(ix, s, pEv.id) || 0
+      const veh = L(line.key) || 0
+      const est = (line.sources || []).find(r => r.startsWith('qa-'))
+      push({
+        id: 'vehicle-donation', area: 'deductions', title: 'Donated vehicle deducted above what the charity sold it for', kind: 'client_answer', severity: 'medium',
+        status: veh <= proceeds ? 'pass' : 'fail',
+        summary: `Form 1098-C: the charity sold the vehicle for ${proceeds.toLocaleString()}. The deduction is limited to gross proceeds (IRC 170(f)(12)); the return claims ${veh.toLocaleString()}${est ? ', the client\'s own estimate' : ''}.`,
+        detail: ['Keep the 1098-C with Form 8283 — noncash gifts are a common examination item.'],
+        expected: proceeds, actual: veh, lines: [line.key, 'SchA.12'], evidence: [pEv.id, d.id, ...(est ? [est] : [])],
+        suggestions: [{ lineKey: line.key, newValue: proceeds, fedCategory: 'itemized', reason: `Limited to gross proceeds ${proceeds.toLocaleString()} on Form 1098-C box 4c (vehicle sold by the charity); IRC 170(f)(12).`, evidence: [pEv.id, d.id] }],
+      })
+    }
     const mort = L('SchA.8a') || 0
     const lone = evVal(ix, s, 'ev-1029') || 0, pecan = evVal(ix, s, 'ev-1034') || 0, pts = evVal(ix, s, 'ev-1030') || 0
     const exp = lone + pecan + pts
@@ -401,19 +516,20 @@ export function runChecks(ix: Index, s: State, eff: Effective, clock: string): C
 
   // ---------- Dependents / identity ----------
   {
-    const theo = ix.people.get('theo')
-    const corrected = s.corrections.get('household:theo.ssn')?.value
-    const current = corrected || theo.ssn
-    const card = received(ix, 'D71', clock) ? evVal(ix, s, 'ev-1080') : null
-    const prior = evVal(ix, s, 'ev-0012')
-    push({
-      id: 'theo-ssn', area: 'intake', title: "Theo's SSN in the organizer doesn't match last year's return", kind: 'client_answer', severity: 'high',
-      status: current === prior ? 'pass' : 'fail',
-      summary: `Organizer: ${current}. 2024 return as filed: ${prior}${card ? `; Social Security card (D71): ${card}` : ''}. Digits transposed - the e-file will reject (R0000-504-02) and the child tax credit would be disallowed.`,
-      detail: ['Caught before filing by comparing household data with the prior-year return; the card is the definitive source.'],
-      expected: prior, actual: current, lines: ['F8812.4'], evidence: ['household:theo', 'ev-0012', ...(card ? ['ev-1080'] : [])], suggestions: [],
-      action: { kind: 'correct_household', label: `Correct to ${prior}`, payload: { ref: 'household:theo.ssn', value: prior } },
-    })
+    // Each dependent's SSN is compared with the Social Security card (if in the file) and last
+    // year's return; a mismatch rejects the e-file and costs the credit.
+    for (const t of dependentTins(ix, s, clock)) {
+      if (!t.expected) continue
+      const first = t.person.name.split(' ')[0]
+      push({
+        id: `dep-ssn-${t.person.id}`, area: 'intake', title: t.ok ? `${first}'s SSN agrees to ${t.card ? 'the Social Security card' : "last year's return"}` : `${first}'s SSN doesn't match ${t.card ? 'the Social Security card' : "last year's return"}`, kind: 'client_answer', severity: 'high',
+        status: t.ok ? 'pass' : 'fail',
+        summary: `Organizer: ${t.current}. ${t.pyEv ? `Prior-year return: ${t.pyEv.value}. ` : ''}${t.card ? `Social Security card (${t.card.document_id}): ${t.card.value}. ` : ''}A mismatched dependent SSN rejects the e-file (R0000-504-02) and disallows the credit.`,
+        detail: ['Caught before filing by comparing household data with the prior-year return; the card is the definitive source.'],
+        expected: t.expected, actual: t.current, lines: ['F8812.4'], evidence: [`household:${t.person.id}`, ...(t.pyEv ? [t.pyEv.id] : []), ...(t.card ? [t.card.id] : [])], suggestions: [],
+        action: { kind: 'correct_household', label: `Correct to ${t.expected}`, payload: { ref: t.ref, value: t.expected } },
+      })
+    }
     const dd = [...s.decisions.values()].some(d => d.kind === 'due_diligence' && !d.superseded)
     push({
       id: 'due-diligence', area: 'deductions', title: 'Due diligence (Form 8867) for CTC / ODC', kind: 'judgment', severity: 'medium',

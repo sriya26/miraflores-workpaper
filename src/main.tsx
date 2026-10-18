@@ -14,7 +14,7 @@ function Boot() {
     loadPacket().then(p => setIx(buildIndex(p))).catch(e => setErr(String(e)))
   }, [])
   if (err) return <div className="empty">Could not load the packet: {err}</div>
-  if (!ix) return <div className="empty" style={{ paddingTop: '30vh' }}>Loading the Okafor-Lindqvist packet…</div>
+  if (!ix) return <div className="empty" style={{ paddingTop: '30vh' }}>Loading the client packet…</div>
   return <Provider ix={ix}><App /></Provider>
 }
 

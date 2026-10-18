@@ -5,12 +5,13 @@ import { AREAS } from '../areas'
 import { money, date, dateTime, hash, uid, signed, pct } from '../format'
 import { diagnosticsState } from './Findings'
 import { buildResponsePackage, ResponsePackage } from './Examiner'
+import { dependentTins } from '../checks'
 
 export function returnFingerprint(ctx: Ctx) {
   const parts = AREAS.map(a => areaFingerprint(ctx, a.id).fingerprint).join('|')
   const sum = JSON.stringify(ctx.eff.summary)
-  const theo = ctx.s.corrections.get('household:theo.ssn')?.value || ''
-  return hash(parts + sum + theo)
+  const hh = [...ctx.s.corrections.entries()].filter(([k]) => k.startsWith('household:')).map(([k, v]) => k + '=' + v.value).join('|')
+  return hash(parts + sum + hh)
 }
 
 export function requiredSteps(ctx: Ctx) {
@@ -57,11 +58,11 @@ export function Filing() {
   const stepsLeft = steps.filter(s => !s.done && !['Client approval and e-file authorization', 'Partner sign-off'].includes(s.step))
   const readyForPartner = bl.filter(b => !(b.kind === 'sign-off' && b.text.includes('Partner'))).length === 0
   const submit = () => {
-    const theo = ctx.s.corrections.get('household:theo.ssn')?.value || ctx.ix.people.get('theo').ssn
-    const ssa = ctx.ix.evs.get('ev-1080')!.value // the SSA record of Theo's number (matches his card)
-    const ok = theo === ssa
+    // The IRS matches each dependent's SSN against SSA records; the card in the file stands in for them.
+    const bad = dependentTins(ctx.ix, ctx.s, '9999-12-31').find(t => !t.ok)
+    const ok = !bad
     const id = uid('sub')
-    ctx.emit('filing.submit', { id, jurisdiction: 'federal', status: ok ? 'accepted' : 'rejected', errors: ok ? [] : [{ code: 'R0000-504-02', message: "Dependent's taxpayer identification number and name control must match the e-file database (dependent 2: Theo Lindqvist-Okafor)." }] }, { action: 'submit' })
+    ctx.emit('filing.submit', { id, jurisdiction: 'federal', status: ok ? 'accepted' : 'rejected', errors: ok ? [] : [{ code: 'R0000-504-02', message: `Dependent's taxpayer identification number and name control must match the e-file database (${bad!.person.name}).` }] }, { action: 'submit' })
     ctx.emit('filing.submit', { id: uid('sub'), jurisdiction: 'california', status: ok ? 'accepted' : 'not_transmitted', errors: ok ? [] : [{ code: 'STATE-HOLD', message: 'State return held because the federal return was rejected.' }] }, { action: 'submit' })
     if (ok) {
       ctx.emit('filing.freeze', { snapshot: { lines: Object.fromEntries([...ctx.eff.lines].map(([k, v]) => [k, v.value])), summary: ctx.eff.summary, fingerprint: rfp, adjustments: ctx.eff.activeAdjustments.map(a => a.id), version: ctx.vix.v.version } }, { action: 'submit' })
@@ -116,7 +117,7 @@ export function Filing() {
           </Step>
           <Step n={3} title="E-file" done={!!accepted}>
             {subs.map(s => <div key={s.id} className="row small" style={{ padding: '3px 0' }}><Badge tone={s.status === 'accepted' ? 'ok' : s.status === 'rejected' ? 'bad' : 'muted'}>{s.status}</Badge><span>{s.jurisdiction}</span><span className="muted grow">{date(s.seasonAt)}</span>{s.errors.map((e: any) => <span key={e.code} className="tiny" title={e.message}>{e.code}</span>)}</div>)}
-            {subs.filter(s => s.status === 'rejected').slice(-1).map(s => <div key={s.id} className="callout bad small mt8">{s.errors[0]?.message} → Fix: correct Theo's SSN (finding “Theo's SSN…”) and resubmit. The rejection is part of the record.</div>)}
+            {subs.filter(s => s.status === 'rejected').slice(-1).map(s => <div key={s.id} className="callout bad small mt8">{s.errors[0]?.message} → Fix: correct the dependent's SSN (see Findings) and resubmit. The rejection is part of the record.</div>)}
             {!accepted && ctx.can('submit') && <button className="btn primary sm mt8" disabled={!approvalCurrent || !partnerSo || partnerSo.fingerprint !== rfp} onClick={submit}>Transmit federal + California</button>}
             {!accepted && !ctx.can('submit') && <div className="tiny muted mt8">Only the signing partner (Helen Strand, PTIN P00876543) transmits.</div>}
             {ctx.clock >= '2026-07-13T17:04:00Z' && <div className="tiny muted mt8">Packet replay: the scripted season shows a federal rejection on 07/13 (R0000-504-02) and acceptance on 07/14. <Ref r="agency:/efile" /></div>}
@@ -224,7 +225,7 @@ export function ClientCopy({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Client copy — 2025 return summary" onClose={onClose} wide foot={<><span className="small muted grow">Sensitive numbers are masked on the client copy.</span><button className="btn" onClick={() => window.print()}>Print / save PDF</button><button className="btn primary" onClick={onClose}>Close</button></>}>
       <div className="small">
-        <p><b>Ngozi Okafor & Erik Lindqvist</b> — married filing jointly · Form 1040 and California Form 540NR (part-year resident to 07/14/2025). Prepared by Miraflores; signed by Helen Strand, CPA.</p>
+        <p><b>{ctx.profile.names}</b> — {ctx.profile.filingStatus.toLowerCase()} · Form 1040{ctx.profile.moves.length ? ` and ${ctx.profile.moves[0].from} part-year return (resident until ${ctx.profile.moves[0].date})` : ''}. Prepared by Miraflores; signed by Helen Strand, CPA.</p>
         <table className="t"><thead><tr><th></th><th className="num">2024</th><th className="num">2025</th></tr></thead><tbody>
           <tr><td>Adjusted gross income</td><td className="num">{money(p['F1040.11'])}</td><td className="num">{money(s.federal.agi)}</td></tr>
           <tr><td>Federal total tax</td><td className="num">{money(p['F1040.24'])}</td><td className="num">{money(s.federal.total_tax)}</td></tr>

@@ -38,13 +38,13 @@ export function AreaView({ id }: { id: string }) {
   const preparer = assign?.preparer || ctx.ix.p.firm.assignment_at_start.preparer
   const reviewer = assign?.reviewer || ctx.ix.p.firm.assignment_at_start.reviewer
   const budget = area.budget ? ctx.ix.p.firm.budget_hours[area.budget] : undefined
-  const notes = [...ctx.s.notes.values()].filter(n => n.kind !== 'variance' && (n.refs.some(r => keys.includes(r) || area.docs.includes(r)) || n.refs.includes('area:' + id)))
+  const notes = [...ctx.s.notes.values()].filter(n => n.kind !== 'variance' && (n.refs.some(r => keys.includes(r) || ctx.areaDocs(id).includes(r)) || n.refs.includes('area:' + id)))
   return (
     <div className="page">
       <div className="page-head">
         <div className="grow">
           <div className="small muted">{ctx.userName(preparer)} prepares · {ctx.userName(reviewer)} reviews{budget != null ? ` · ${st.hours.toFixed(1)} of ${budget}h` : ''}</div>
-          <h1 style={{ marginTop: 6 }}>{area.name}</h1>
+          <h1 style={{ marginTop: 6 }}>{id === 'business' && ctx.profile.businessName ? `${ctx.profile.businessName} (Schedule C)` : area.name}</h1>
           <p>{area.blurb}</p>
         </div>
         {ctx.can('note') && <button className="btn sm" onClick={() => setNote(true)}>Add review note</button>}
@@ -77,7 +77,7 @@ export function AreaView({ id }: { id: string }) {
 
       <div className="section-title">Source documents</div>
       <div className="small" style={{ lineHeight: 1.9 }}>
-        {area.docs.map((d, i) => { const doc = ctx.ix.docs.get(d)!; return <React.Fragment key={d}>{i > 0 && <span className="muted"> · </span>}<a href={`#/doc/${d}`} style={{ opacity: doc.received_at > ctx.clock ? 0.4 : 1 }}>{doc.title.replace(/^2025 /, '')}</a></React.Fragment> })}
+        {ctx.areaDocs(id).map((d, i) => { const doc = ctx.ix.docs.get(d)!; return <React.Fragment key={d}>{i > 0 && <span className="muted"> · </span>}<a href={`#/doc/${d}`} style={{ opacity: doc.received_at > ctx.clock ? 0.4 : 1 }}>{doc.title.replace(new RegExp(`^${ctx.profile.taxYear} `), '')}</a></React.Fragment> })}
       </div>
       {(LINKS[id] || []).length > 0 && <div className="small mt12">{LINKS[id].map((l, i) => <React.Fragment key={l.to}>{i > 0 && <span className="muted"> · </span>}<a href={'#' + l.to}>{l.label} →</a></React.Fragment>)}</div>}
 

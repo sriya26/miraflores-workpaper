@@ -60,17 +60,19 @@ export function Overview() {
   const days = Math.ceil((+new Date('2026-10-15T23:59:00Z') - +new Date(ctx.clock)) / 86400000)
   const filed = ctx.s.filing.submissions.some(x => x.status === 'accepted' && x.jurisdiction === 'federal')
   const empty = ctx.s.events.length === 0
+  const P = ctx.profile
   const amt = (v: number) => (v > 0 ? 'Owe ' : 'Refund ') + money(Math.abs(v))
   return (
     <div className="page">
       <div className="page-head">
         <div className="grow">
-          <div className="small muted">2025 return · client CL-20417</div>
-          <h1 style={{ marginTop: 6, fontSize: 30 }}>Ngozi Okafor & Erik Lindqvist</h1>
+          <div className="small muted">{P.taxYear} return · client {P.clientId}</div>
+          <h1 style={{ marginTop: 6, fontSize: 30 }}>{P.names}</h1>
           <div className="facts">
-            <span><b>Married filing jointly</b></span>
-            <span>Moved <b>California → Texas</b> on July 15, 2025</span>
-            <span>Dependents <b>Ada</b> (19, UC Davis) and <b>Theo</b> (8)</span>
+            <span><b>{P.filingStatus}</b></span>
+            {P.moves.map(m => <span key={m.date}>Moved <b>{m.from} → {m.to}</b> on {date(m.date)}</span>)}
+            {P.dependents.length > 0 && <span>{P.dependents.length === 1 ? 'Dependent' : 'Dependents'} {P.dependents.map((d, i) => <React.Fragment key={d.name}>{i > 0 && (i === P.dependents.length - 1 ? ' and ' : ', ')}<b>{d.first}</b> ({d.age}{d.student ? ', student' : ''})</React.Fragment>)}</span>}
+            {P.businessName && <span>Runs <b>{P.businessName}</b></span>}
           </div>
           <p className="mt12">{filed ? 'Filed and accepted.' : days > 0 ? `${days} days to the extended deadline (Oct 15, 2026).` : 'Past the extended deadline.'} Latest engine run {ctx.vix.v.version}, {date(ctx.vix.v.computed_at)}.</p>
         </div>
@@ -108,9 +110,10 @@ export function Overview() {
         <tbody>
           {AREAS.map(a => {
             const st = areaStatus(ctx, a.id)
+            const name = a.id === 'business' && P.businessName ? `${P.businessName} (Schedule C)` : a.name
             return (
               <tr key={a.id} onClick={() => ctx.go(`/area/${a.id}`)}>
-                <td>{a.name}</td>
+                <td>{name}</td>
                 <td className="r" style={{ color: st.tone === 'bad' ? 'var(--bad)' : st.tone === 'ok' ? 'var(--ok)' : st.tone === 'warn' ? 'var(--warn)' : undefined }}>{st.text}</td>
               </tr>
             )
