@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useCtx, blockers, findingState, signoffState, Ctx } from '../ctx'
 import { AREAS, areaOfLine } from '../areas'
 import { money, date, ago } from '../format'
@@ -85,6 +85,8 @@ export function Overview() {
         </div>
       )}
 
+      <Guide />
+
       <div className="hero">
         {(['federal', 'california'] as const).map(j => {
           const now = e[j].balance_due, eng = b[j].balance_due
@@ -133,6 +135,52 @@ export function Overview() {
       )}
 
       {!empty && <div className="mt24 small"><a href="#/" style={{ color: 'var(--ink-3)' }} onClick={e => { e.preventDefault(); if (confirm('Erase all workpaper activity and return to the packet as delivered?')) resetAll() }}>Reset to the packet as delivered</a></div>}
+    </div>
+  )
+}
+
+// First-day guide. Dismissal is a per-person convenience, so it lives in this browser only.
+const GUIDE: Record<string, [string, string][]> = {
+  preparer: [
+    ['Work down “Next for you”', 'It is your queue: findings to fix, questions to answer, areas to sign off.'],
+    ['Click any number', 'The side panel shows where it came from (the exact field on the document), how it was built, and its history.'],
+    ['Fix, don’t overwrite', 'Apply a proposed fix or adjust a line. The original stays, with who, why and the tax effect. Every fix can be undone.'],
+    ['Sign off an area when it’s done', 'If anything in it changes later, the sign-off reopens and shows what changed.'],
+  ],
+  reviewer: [
+    ['Start with what changed', 'The bell and “Since you last looked” show every change since your last visit.'],
+    ['Click any number', 'Trace it to the document field, the adjustments on it, and who verified it.'],
+    ['Raise review notes', 'A blocking note holds filing until it is resolved.'],
+    ['Sign off area by area', 'Sign-offs reopen on their own if the work changes afterwards.'],
+  ],
+  partner: [
+    ['Check what’s holding filing', 'Review & filing lists every blocker and required step.'],
+    ['Approve large adjustments', 'Changes with a tax effect over the firm threshold wait for you under More → Adjustments.'],
+    ['Sign the return', 'Your sign-off and the client’s 8879 bind to this exact return; any later change voids them.'],
+  ],
+  firm_administrator: [
+    ['Firm standards and access', 'More → Firm settings holds standards, the role matrix and the sensitive-data view log.'],
+    ['Assignments and budget', 'More → Notes & questions has tabs for who owns each area and time against budget.'],
+  ],
+  quality_reviewer: [
+    ['Read everything, change nothing', 'You can trace any number and leave notes; fixes and sign-offs belong to the engagement team.'],
+    ['Sensitive values are masked', 'Revealing one is logged in the firm’s access log.'],
+  ],
+}
+
+function Guide() {
+  const ctx = useCtx()
+  const key = 'wp.guide.' + ctx.user.id
+  const read = () => { try { return localStorage.getItem(key) === 'off' } catch { return false } }
+  const [off, setOff] = useState(read)
+  const tips = GUIDE[ctx.user.role]
+  if (!tips) return null
+  const set = (v: boolean) => { try { v ? localStorage.setItem(key, 'off') : localStorage.removeItem(key) } catch {} setOff(v) }
+  if (off) return <div className="small mb16" style={{ textAlign: 'right' }}><a href="#/" onClick={e => { e.preventDefault(); set(false) }}>How this works</a></div>
+  return (
+    <div className="guide mb16">
+      <div className="row"><b className="grow">How this works</b><button className="btn sm ghost" onClick={() => set(true)}>Got it</button></div>
+      <ol>{tips.map(([t, d]) => <li key={t}><b>{t}.</b> <span className="ink2">{d}</span></li>)}</ol>
     </div>
   )
 }
