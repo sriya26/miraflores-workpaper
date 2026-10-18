@@ -29,4 +29,4 @@ Server-side enforcement and auth; firm-configurable checks; engine re-run on dem
 
 - **Claude Code** (Anthropic's coding agent, running in a cloud session) was the main tool. It read the PDF and the 1.9 MB packet, analyzed the data with Python scripts to find the errors (comparing extracted values to printed text, re-footing sums, comparing pages trip by trip, reconciling broker lots), wrote the React/TypeScript app, the checks and the tests, drove a headless browser (Playwright/Chromium) to test the full preparer → reviewer → partner → client → e-file flow and screenshot every page, and drafted these documents.
 - **Stack:** React 18, TypeScript, Vite; Vitest for the checks test; Playwright for end-to-end smoke tests; optional Vercel serverless function plus Upstash Redis for shared state.
-- **Human role:** framing the problem, choosing the design, reviewing the errors and judgments, and the walkthrough video.
+- **Human role:** framing the problem, choosing the design, pushing back on a cluttered first UI (it was redesigned to a calmer, task-first layout), reviewing the errors and judgments, and the walkthrough video.
