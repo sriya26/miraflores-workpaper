@@ -27,6 +27,9 @@ test('checks find the errors and fixes turn them green', () => {
   eff = computeEffective(ix, vix, s)
   for (const a of eff.activeAdjustments) { const e = eff.effects.get(a.id)!; console.log(a.lineKey.padEnd(18), String(Math.round(a.delta)).padStart(8), 'fed', String(e.fed).padStart(7), 'ca', String(e.ca).padStart(6), 'bal', e.fedBalance, e.caBalance, '|', e.detail) }
   console.log('TOTAL', eff.total, eff.summary)
+  // the return's own lines agree with the bottom line
+  expect(eff.lines.get('F1040.37')!.value).toBeCloseTo(eff.summary.federal.balance_due, 0)
+  expect(eff.lines.get('F540NR.97')!.value).toBeCloseTo(-eff.summary.california.balance_due, 0)
   const res2 = runChecks(ix, s, eff, clock)
   for (const r of res2) if (r.status === 'fail') console.log('STILL FAIL', r.id, r.expected, r.actual)
   expect(res2.filter(r => r.status === 'fail' && r.suggestions.length).length).toBe(0)

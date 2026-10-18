@@ -279,7 +279,7 @@ export function Documents() {
                 <td className="mono">{d.id}</td>
                 <td>{d.title}</td>
                 <td className="nowrap small">{date(d.received_at)}</td>
-                <td className="small" style={{ color: d.extraction.status === 'extracted' ? 'var(--ink-3)' : 'var(--warn)' }}>{d.extraction.status === 'extracted' ? `${d.extraction.values} values` : d.extraction.status.replace('_', ' ')}</td>
+                <td className="small" style={{ color: d.extraction.status === 'extracted' ? 'var(--ink-3)' : 'var(--warn)' }}>{d.extraction.status === 'extracted' ? `${d.extraction.values} value${d.extraction.values === 1 ? '' : 's'}` : d.extraction.status.replace('_', ' ')}</td>
                 <td className="small"><span style={{ color: status.tone === 'ok' ? 'var(--ink-2)' : status.tone === 'warn' ? 'var(--warn)' : 'var(--ink-3)' }}>{status.label}</span>{u.disp && <div className="tiny muted ellipsis" style={{ maxWidth: 240 }}>{u.disp.reason}</div>}</td>
                 <td className="num small">{u.evs.length ? `${verified}/${u.evs.length}` : '—'}</td>
                 <td>{u.checks.some(c => c.status !== 'pass') && <span className="mark bad" title={u.checks.filter(c => c.status !== 'pass').map(c => c.title).join('\n')} />}</td>

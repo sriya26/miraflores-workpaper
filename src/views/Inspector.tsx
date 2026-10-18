@@ -58,7 +58,8 @@ function LineInspector({ k }: { k: string }) {
           {area && <a className="small" href={`#/area/${area.id}`}>{area.short} →</a>}
         </div>
       </div>
-      {le?.stale && <div className="callout warn mt12 small">An input changed through a non-linear rule ({line.rule}). The engine must recompute this line; the tax effect is carried by the adjustment's rate estimate.</div>}
+      {le?.estimated && <div className="callout mt12 small">≈ Includes the estimated tax effect of the workpaper's adjustments (each change × the engine's per-dollar rate). The engine will compute the exact figure on its next run.</div>}
+      {le?.stale && !le?.estimated && <div className="callout warn mt12 small">Some of this line's inputs pass through a rule the workpaper can't recompute (tax tables, phase-outs, loss limits). {le.delta ? 'The change shown covers only the inputs that are simple sums; ' : ''}the engine will recompute it. The tax effect is already counted in the bottom line.</div>}
       {line.note && <div className="callout mt12 small">Engine note: {line.note}</div>}
       <div className="row mt12 wrap gap4">
         {ctx.can('adjust') && typeof line.value === 'number' && <button className="btn primary sm" onClick={() => setAdj(true)}>Δ Adjust</button>}

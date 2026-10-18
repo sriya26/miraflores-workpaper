@@ -17,6 +17,7 @@ export interface LineEff {
   adjIds: string[] // adjustments made directly on this line
   via: string[] // adjustments that flowed into this line
   stale: boolean // depends on a changed line through a non-linear rule
+  estimated?: boolean // carries a rate-estimated tax effect (total tax and what flows from it)
 }
 
 export interface Effect { fed: number; ca: number; fedBalance: number; caBalance: number; detail: string }
@@ -129,6 +130,17 @@ export function computeEffective(ix: Index, vix: VersionIndex, s: State, opts: {
     const e = adjustmentEffect(vix, a)
     effects.set(a.id, e)
     total.fed += e.fed; total.ca += e.ca; total.fedBalance += e.fedBalance; total.caBalance += e.caBalance
+  }
+  // Tax lines can't be recomputed, but the estimated tax change is known: put it on total tax so
+  // the lines below it (amount owed / overpaid) agree with the bottom line.
+  for (const [key, amt] of [['F1040.24', total.fed], ['F540NR.64', total.ca]] as [string, number][]) {
+    if (!amt || !lines.has(key)) continue
+    const { deltas } = propagate(vix, key, amt)
+    for (const [k, d] of deltas) {
+      const le = lines.get(k)
+      if (!le || typeof le.base !== 'number') continue
+      le.delta += d; le.value = le.base + le.delta; le.estimated = true
+    }
   }
   const sf = vix.v.summary.federal, sc = vix.v.summary.california
   const fedAgiDelta = lines.get('F1040.11')?.delta || 0

@@ -62,6 +62,9 @@ export function seedDemo(ctx: Ctx) {
     ['D02', 'used', 'Section 7216 consent.'], ['D03', 'used', 'IP PIN for e-file.'], ['D04', 'used', 'Identity verified.'], ['D05', 'used', 'Identity verified.'],
     ['D42', 'used', '2024 contribution made 02/12/2025 — confirms 8606 basis.'],
     ['D36', 'used', 'Interest, max and year-end balances (Schedule B, 8938).'],
+    ['D06', 'used', 'Prior-year return: carryovers, 2024 comparison, dependent SSNs.'],
+    ['D15', 'supports_finding', 'Deposit detail shows the 1099-K card receipts already in the books; phone/internet and Spotify detail.'],
+    ['D54', 'supports_finding', 'Buyer closing statement: seller credit for 2025 taxes, purchase points.'],
   ]
   for (const [docId, status, reason] of disp) mk(P, 'disposition', { docId, status, reason })
   mk(P, 'step', { step: 'Identity verified', done: true, note: 'TX driver licenses D04/D05 match organizer; IP PIN D03.' })

@@ -129,7 +129,8 @@ function LineRow({ k, sel, onClick }: { k: string; sel: boolean; onClick: () => 
       <div className="ellipsis"><span className="lk">{line.line}</span>{line.label}</div>
       <div className="lv">
         {le.delta !== 0 && <span className="strike tiny" style={{ marginRight: 8 }}>{val(le.base)}</span>}
-        <span style={{ color: le.delta ? 'var(--violet)' : undefined, fontWeight: le.delta ? 650 : 500 }}>{val(le.value)}</span>
+        <span style={{ color: le.delta ? 'var(--violet)' : undefined, fontWeight: le.delta ? 650 : 500 }} title={le.estimated ? 'Includes the estimated tax effect of adjustments; the engine computes the exact figure' : le.stale ? 'Waiting on the engine: an input changed through a rule the workpaper does not recompute' : undefined}>{le.estimated ? '≈ ' : ''}{val(le.value)}</span>
+        {le.stale && !le.estimated && le.delta === 0 && <span className="tiny" style={{ color: 'var(--warn)', marginLeft: 8 }}>recompute</span>}
       </div>
       <div className="right" title={finding ? finding.title : v || allVerified ? 'Verified' : ''}>{finding ? <span className="mark bad" /> : v || allVerified ? <span className="mark ok" /> : null}</div>
     </div>
