@@ -72,7 +72,8 @@ async function probeRemote() {
     if (!data.enabled) { remote = 'off'; return }
     remote = 'on'
     const local = events.slice()
-    if (merge(data.events || [])) emit()
+    merge(data.events || [])
+    emit() // also refreshes the sync status shown in the sidebar
     // push anything we have that the server doesn't
     const serverIds = new Set((data.events || []).map((e: WPEvent) => e.id))
     const missing = local.filter(e => !serverIds.has(e.id))
