@@ -187,7 +187,12 @@ export function AdjustmentCard({ id }: { id: string }) {
         {a.status === 'reverted' ? <Badge tone="muted">reverted</Badge> : a.rejected ? <Badge tone="bad">rejected</Badge> : needsPartner && !partnerOk ? <Badge tone="warn">awaiting partner</Badge> : partnerOk ? <Badge tone="ok">partner approved</Badge> : reviewed ? <Badge tone="ok">reviewed</Badge> : <Badge tone="info">recorded</Badge>}
       </div>
       <div className="small mt8">{a.reason}</div>
-      {e && a.status === 'active' && <div className="tiny muted mt8">Tax effect: federal <b>{signed(e.fed + e.fedBalance)}</b>, California <b>{signed(e.ca + e.caBalance)}</b> — {e.detail}</div>}
+      {e && a.status === 'active' && (() => {
+        const bal = e.fedBalance || e.caBalance
+        const lbl = bal && !e.fed && !e.ca ? 'Changes the amount owed (not the tax)' : 'Tax effect'
+        const fed = e.fed + e.fedBalance, ca = e.ca + e.caBalance
+        return <div className="tiny muted mt8">{lbl}: {fed ? <>federal <b>{signed(fed)}</b></> : null}{fed && ca ? ', ' : null}{ca ? <>California <b>{signed(ca)}</b></> : null}{!fed && !ca ? 'none' : null}{e.detail ? ` — ${e.detail}` : ''}</div>
+      })()}
       {a.evidence.length > 0 && <div className="mt8"><Refs refs={a.evidence} max={5} /></div>}
       <div className="row mt8 wrap">
         <Who id={a.by} at={a.at} />
