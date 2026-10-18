@@ -55,7 +55,7 @@ export function Overview() {
   const ctx = useCtx()
   const steps = useMemo(() => nextSteps(ctx), [ctx.s, ctx.eff, ctx.checks, ctx.user])
   const since = ctx.s.seen.get(ctx.user.id)
-  const feed = feedFor(ctx, since, true).filter(f => !f.mine).slice(0, 5)
+  const feed = feedFor(ctx, since, true).filter(f => !f.mine && !steps.some(st => st.go === f.go)).slice(0, 5)
   const e = ctx.eff.summary, b = ctx.vix.v.summary
   const days = Math.ceil((+new Date('2026-10-15T23:59:00Z') - +new Date(ctx.clock)) / 86400000)
   const filed = ctx.s.filing.submissions.some(x => x.status === 'accepted' && x.jurisdiction === 'federal')
@@ -129,7 +129,7 @@ export function Overview() {
         </>
       )}
 
-      {!empty && <div className="mt24"><button className="btn sm ghost" onClick={() => { if (confirm('Erase all workpaper activity and return to the packet as delivered?')) resetAll() }}>Reset to the packet as delivered</button></div>}
+      {!empty && <div className="mt24 small"><a href="#/" style={{ color: 'var(--ink-3)' }} onClick={e => { e.preventDefault(); if (confirm('Erase all workpaper activity and return to the packet as delivered?')) resetAll() }}>Reset to the packet as delivered</a></div>}
     </div>
   )
 }
