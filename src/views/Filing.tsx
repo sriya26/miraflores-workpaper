@@ -207,7 +207,7 @@ export function downloadRollforward(ctx: Ctx) {
     assets: ctx.vix.v.assets,
     adjustments_made: ctx.eff.activeAdjustments.map(a => ({ line: a.lineKey, delta: a.delta, reason: a.reason, by: a.by, at: a.at })),
     decisions: [...ctx.s.decisions.values()],
-    open_items: [...ctx.s.notes.values()].filter(n => n.status !== 'resolved').map(n => ({ subject: n.subject, body: n.body })),
+    open_items: [...ctx.s.notes.values()].filter(n => n.status !== 'resolved' && n.kind !== 'variance').map(n => ({ subject: n.subject, body: n.body })),
     outside_filings: ctx.checks.find(c => c.id === 'outside-filings')?.summary,
     planning: ctx.ix.p.planning_reference_2026,
     history: ctx.s.events,

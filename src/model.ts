@@ -14,6 +14,7 @@ export interface User {
   credential?: string | null
   clearance: boolean
   note?: string
+  activeFrom?: string // staff start date; before it the user has no access
 }
 
 export interface WPEvent {
@@ -323,7 +324,7 @@ function apply(s: State, e: WPEvent) {
 
 export function usersFrom(ix: Index): User[] {
   const staff: User[] = ix.p.firm.staff.map((s: any) => ({
-    id: s.id, name: s.name, role: s.role as RoleId, credential: s.credential, clearance: !!s.sensitive_data_clearance, note: s.note,
+    id: s.id, name: s.name, role: s.role as RoleId, credential: s.credential, clearance: !!s.sensitive_data_clearance, note: s.note, activeFrom: s.active_from,
   }))
   const clients: User[] = ix.p.firm.client_users.map((c: any) => ({ id: c.id, name: c.name, role: 'client' as RoleId, clearance: true }))
   return [...staff, ...clients, { id: 'irs-01', name: 'IRS examiner (Letter 566)', role: 'examiner', clearance: false, note: 'Read-only access to the filed record.' }]
@@ -339,8 +340,14 @@ export const ROLE_LABEL: Record<RoleId, string> = {
   examiner: 'IRS examiner',
 }
 
+export function staffActive(u: User, clock?: string): boolean {
+  return !u.activeFrom || !clock || clock.slice(0, 10) >= u.activeFrom
+}
+
 // Enforced permissions. Every write goes through `can` in the store, not just the UI.
-export function can(u: User, action: string): boolean {
+// Staff who haven't started yet (at the season clock) can look but not act or reveal.
+export function can(u: User, action: string, clock?: string): boolean {
+  if (!staffActive(u, clock) && action !== 'view_internal') return false
   const r = u.role
   const staffWork = r === 'preparer' || r === 'reviewer' || r === 'partner'
   switch (action) {

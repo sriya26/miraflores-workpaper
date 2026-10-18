@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState, useCall
 import type { Index, VersionIndex } from './packet'
 import { versionAt } from './packet'
 import type { State, User, WPEvent } from './model'
-import { reduce, can, usersFrom } from './model'
+import { reduce, can, usersFrom, staffActive } from './model'
 import { computeEffective, Effective } from './effective'
 import { runChecks, varianceFlags, CheckResult } from './checks'
 import { append, getEvents, subscribe } from './store'
@@ -91,8 +91,8 @@ export function Provider({ ix, children }: { ix: Index; children: React.ReactNod
   })
 
   const emit: Ctx['emit'] = (type, payload, opts = {}) => {
-    if (opts.action && !can(user, opts.action)) {
-      toast({ text: `${user.name} (${user.role.replace(/_/g, ' ')}) is not allowed to do that.`, kind: 'error' })
+    if (opts.action && !can(user, opts.action, clock)) {
+      toast({ text: !staffActive(user, clock) ? `${user.name} starts on ${user.activeFrom} and has no access yet.` : `${user.name} (${user.role.replace(/_/g, ' ')}) is not allowed to do that.`, kind: 'error' })
       return null
     }
     const e = mk(type, payload, opts.batch)
@@ -100,7 +100,7 @@ export function Provider({ ix, children }: { ix: Index; children: React.ReactNod
     return e
   }
   const emitMany: Ctx['emitMany'] = (list, opts = {}) => {
-    if (opts.action && !can(user, opts.action)) {
+    if (opts.action && !can(user, opts.action, clock)) {
       toast({ text: `${user.name} is not allowed to do that.`, kind: 'error' })
       return []
     }
@@ -115,7 +115,7 @@ export function Provider({ ix, children }: { ix: Index; children: React.ReactNod
   const value: Ctx = {
     ix, s, vix, eff, checks, variances, profile, docAreas, areaDocs: (a: string) => ix.p.documents.filter(d => docAreas.get(d.id) === a).map(d => d.id), users, user, setUserId, clock, setClock, route, go, inspect, setInspect,
     emit, emitMany, toast, toasts, dismiss: id => setToasts(ts => ts.filter(x => x.id !== id)),
-    can: a => can(user, a), frozen: !!s.filing.frozen, userName,
+    can: a => can(user, a, clock), frozen: !!s.filing.frozen, userName,
   }
   ;(window as any).__wp = value // handy for scripted demos and tests
   return <C.Provider value={value}>{children}</C.Provider>

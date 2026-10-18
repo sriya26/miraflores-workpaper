@@ -30,13 +30,13 @@ function Threads({ focus }: { focus?: string }) {
   const [newOpen, setNewOpen] = useState(false)
   useEffect(() => { if (focus) setSel(focus) }, [focus])
   const notes = [...ctx.s.notes.values()].sort((a, b) => (a.at < b.at ? 1 : -1))
-  const list = notes.filter(n => filter === 'all' ? true : filter === 'open' ? n.status !== 'resolved' : filter === 'mine' ? n.to === ctx.user.id || n.by === ctx.user.id : filter === 'client' ? n.kind === 'client_question' : filter === 'blocking' ? n.blocking && n.status !== 'resolved' : true)
+  const list = notes.filter(n => filter === 'all' ? true : filter === 'open' ? n.status !== 'resolved' && n.kind !== 'variance' : filter === 'variance' ? n.kind === 'variance' : filter === 'mine' ? n.to === ctx.user.id || n.by === ctx.user.id : filter === 'client' ? n.kind === 'client_question' : filter === 'blocking' ? n.blocking && n.status !== 'resolved' : true)
   const n = sel ? ctx.s.notes.get(sel) : list[0]
   return (
     <div className="grid" style={{ gridTemplateColumns: '360px minmax(0,1fr)' }}>
       <div className="card" style={{ alignSelf: 'start' }}>
         <div className="card-head">
-          <select value={filter} onChange={e => setFilter(e.target.value)}><option value="open">Open</option><option value="blocking">Blocking filing</option><option value="mine">Mine</option><option value="client">Client questions</option><option value="all">All</option></select>
+          <select value={filter} onChange={e => setFilter(e.target.value)}><option value="open">Open</option><option value="blocking">Blocking filing</option><option value="mine">Mine</option><option value="client">Client questions</option><option value="variance">Variance explanations</option><option value="all">All</option></select>
           <span className="spacer" />
           {(ctx.can('note') || ctx.can('question_client')) && <button className="btn sm primary" onClick={() => setNewOpen(true)}>+ New</button>}
         </div>

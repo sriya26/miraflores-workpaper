@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useCtx, blockers, findingState, signoffState } from './ctx'
 import { Avatar, Badge, Popover, Modal } from './ui'
-import { ROLE_LABEL } from './model'
+import { ROLE_LABEL, staffActive } from './model'
 import { AREAS } from './areas'
 import { money, date, dateTime, ago } from './format'
 import { resolve, maskText } from './refs'
@@ -70,6 +70,7 @@ function Frame({ children, onSearch, minimal }: { children: React.ReactNode; onS
       {!minimal && <Sidebar />}
       <main className="main">
         {ctx.frozen && <FrozenBanner />}
+        {!staffActive(ctx.user, ctx.clock) && <div className="frozen-banner">{ctx.user.name} starts on {date(ctx.user.activeFrom!)}. Until then this is read-only, with sensitive values masked.</div>}
         {children}
       </main>
       {ctx.inspect && <Inspector refId={ctx.inspect} />}
@@ -175,7 +176,7 @@ function RoleSwitcher() {
           {ctx.users.map(x => (
             <button key={x.id} className={'nav-item' + (x.id === u.id ? ' active' : '')} onClick={() => { ctx.setUserId(x.id); ctx.go(x.role === 'client' || x.role === 'examiner' ? '/' : ctx.route); close() }}>
               <Avatar id={x.id} name={x.name} size={22} />
-              <span className="grow" style={{ lineHeight: 1.2 }}>{x.name}<br /><span className="tiny muted">{ROLE_LABEL[x.role]}{x.clearance ? '' : ' · no sensitive-data clearance'}</span></span>
+              <span className="grow" style={{ lineHeight: 1.2 }}>{x.name}<br /><span className="tiny muted">{ROLE_LABEL[x.role]}{x.clearance ? '' : ' · no sensitive-data clearance'}{!staffActive(x, ctx.clock) ? ` · starts ${date(x.activeFrom!)}` : ''}</span></span>
             </button>
           ))}
           <p className="tiny muted" style={{ margin: '8px' }}>Permissions are enforced on every action, not just hidden in the UI.</p>
@@ -216,7 +217,7 @@ export function feedFor(ctx: ReturnType<typeof useCtx>, since?: string, quiet = 
       case 'decision': text = `recorded a ${p.kind.replace(/_/g, ' ')}: ${p.topic}`; break
       case 'disposition': text = `dispositioned ${p.docId}: ${p.status}`; go = `/doc/${p.docId}`; break
       case 'attach': text = `attached ${p.name}`; break
-      case 'correct': text = `corrected ${p.ref} → ${p.value}`; break
+      case 'correct': text = String(p.ref).startsWith('household:') ? `corrected ${p.ref.split(':')[1]}` : `corrected ${p.ref} → ${p.value}`; break
       case 'finding.status': text = `marked finding ${p.checkId} ${p.status}`; go = `/findings?f=${p.checkId}`; break
       case 'filing.submit': text = `e-filed (${p.jurisdiction}): ${p.status}`; go = '/filing'; break
       case 'filing.approve': text = `approved the return and signed Form 8879`; go = '/filing'; break
@@ -226,7 +227,7 @@ export function feedFor(ctx: ReturnType<typeof useCtx>, since?: string, quiet = 
       case 'time': text = `logged ${p.hours}h on ${p.area}`; break
       default: text = e.type.replace(/\./g, ' ')
     }
-    items.push({ at: e.at, who: e.actor, text, go, mine: e.actor === ctx.user.id })
+    items.push({ at: e.at, who: e.actor, text: maskText(text, ctx.ix), go, mine: e.actor === ctx.user.id })
   }
   return items.reverse()
 }
