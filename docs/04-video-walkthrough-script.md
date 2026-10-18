@@ -37,5 +37,6 @@ More → Adjustments & versions → **Compare versions**: v2 → v3 (what the la
 **7. Technical decisions (7:00–8:00)**
 - The packet is never changed; every action is an event in an append-only log, and the screen is computed from both. That gives history, undo, sign-offs that reopen, freeze and amend, and conflict-free multi-user merging.
 - The engine can't be rerun, so totals update by inferred plus/minus signs, complex lines are flagged "recompute", and tax is estimated with the engine's own per-dollar rates. That's the honest tradeoff.
-- Limitations: permissions are enforced in the browser, the checks are written for this household, and the shared store is optional (Upstash on Vercel).
+- Built for one household, but nothing about the client is hardcoded: the profile and document grouping come from the packet, and the core checks match by form type and field name. A test renumbers every ID and the same findings appear.
+- Limitations: permissions are enforced in the browser, about half the checks still encode this household's specifics, and the shared store is optional (Upstash on Vercel).
 - How AI was used: Claude Code analyzed the data, wrote the code and tests, and drove a headless browser; I directed the design, pushed back on the UI, and reviewed every finding.
