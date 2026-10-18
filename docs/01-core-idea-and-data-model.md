@@ -38,7 +38,7 @@ Workpaper return = engine version at the clock + active adjustments
 
 **Time is a dimension.** A season clock replays the packet: documents, engine versions and agency events appear when they arrived. Filing freezes a snapshot. Later events are tagged as an amendment on top, and "as filed" stays comparable to everything else.
 
-**Roles are enforced, not hidden.** Every write goes through `can(user, action)`. Nobody reviews work they prepared or adjusted. Sensitive values are masked for everyone, and cleared staff can reveal them, with every reveal written to the access log. The client sees only their questions, uploads and the approval screen. The IRS examiner sees only the response package.
+**Roles are enforced, not hidden.** Every write goes through `can(user, action)`. Nobody reviews work they prepared or adjusted. Sensitive values are masked for everyone, and cleared staff can reveal them, with every reveal written to the access log. Staff who have not started yet at the season clock (the quality reviewer starts in January 2027) can look but not act. The client sees only their questions, uploads and the approval screen. The IRS examiner sees only the response package.
 
 **Simulated documents are swappable.** The viewer asks `pageSource(doc, page)` for a page and draws highlights in the pipeline's normalized coordinates. Today it returns a page rebuilt from the JSON (a form view, plus a "Positions" overlay view). A real scan would return `{kind: 'image' | 'pdf', url}` and the same boxes would land on it.
 
