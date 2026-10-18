@@ -7,6 +7,7 @@ import { estimateFix } from './Findings'
 import { areaStats } from './Overview'
 import { NoteModal } from './Modals'
 import { VerifyControl } from './Inspector'
+import { Sensitive } from '../ui'
 
 const LINKS: Record<string, { to: string; label: string }[]> = {
   business: [{ to: '/schedules/books', label: 'Books → Schedule C reconciliation' }, { to: '/schedules/assets', label: 'Depreciation by asset' }],
@@ -65,7 +66,11 @@ export function AreaView({ id }: { id: string }) {
         </>
       )}
 
-      <div className="section-title">Lines<span className="muted" style={{ fontWeight: 400 }}>click a line to see where it came from</span></div>
+      {id === 'intake' && <Household />}
+
+      {keys.length > 0 && (
+        <>
+        <div className="section-title">Lines<span className="muted" style={{ fontWeight: 400 }}>click a line to see where it came from</span></div>
       <div className="card ltree">
         {[...byForm.entries()].map(([form, ks]) => (
           <React.Fragment key={form}>
@@ -74,6 +79,9 @@ export function AreaView({ id }: { id: string }) {
           </React.Fragment>
         ))}
       </div>
+
+        </>
+      )}
 
       <div className="section-title">Source documents</div>
       <div className="small" style={{ lineHeight: 1.9 }}>
@@ -172,5 +180,55 @@ function TimeLine({ area }: { area: string }) {
       <input value={h} onChange={e => setH(e.target.value)} style={{ width: 56, padding: '3px 6px' }} /> h
       <button className="btn sm ghost" onClick={() => { const n = parseFloat(h); if (n > 0) { ctx.emit('time', { area, hours: n, note: '' }, { action: 'time' }); ctx.toast({ text: `Logged ${n}h`, kind: 'ok' }) } }}>Log</button>
     </div>
+  )
+}
+
+// The household record itself, straight from the packet: who is on the return, where they lived.
+function Household() {
+  const ctx = useCtx()
+  const h = ctx.ix.p.household
+  const P = ctx.profile
+  const corr = (id: string) => ctx.s.corrections.get(`household:${id}.ssn`)
+  const ageAt = (dob: string) => { const d = new Date(dob + 'T00:00:00Z'); const y = new Date(`${h.tax_year}-12-31T00:00:00Z`); let a = y.getUTCFullYear() - d.getUTCFullYear(); if (y < new Date(Date.UTC(y.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))) a--; return a }
+  return (
+    <>
+      <div className="section-title">Household<span className="muted" style={{ fontWeight: 400 }}>as entered by the client · {h.entered_by}</span></div>
+      <div className="card">
+        <table className="t">
+          <thead><tr><th>Person</th><th>Role</th><th>Age at year end</th><th>SSN</th><th>Notes</th></tr></thead>
+          <tbody>
+            {h.people.map((p: any) => {
+              const c = corr(p.id)
+              const finding = ctx.checks.find(x => x.id === `dep-ssn-${p.id}` && x.status === 'fail')
+              return (
+                <tr key={p.id} className="click" onClick={() => ctx.setInspect(`household:${p.id}`)}>
+                  <td>{p.name}</td>
+                  <td className="small ink2">{p.relationship || p.role}{p.occupation ? ` · ${p.occupation}` : ''}</td>
+                  <td className="small">{ageAt(p.dob)}{p.full_time_student ? ' · student' : ''}</td>
+                  <td className="small" onClick={e => e.stopPropagation()}>
+                    <Sensitive text={c ? c.value : p.ssn} refName={`household:${p.id}.ssn`} />
+                    {c && <span className="small" style={{ color: 'var(--violet)', marginLeft: 6 }}>corrected</span>}
+                    {finding && <a href={`#/findings?f=${finding.id}`} style={{ color: 'var(--bad)', marginLeft: 6 }}>doesn't match</a>}
+                  </td>
+                  <td className="small muted">{p.note || (p.months_lived_with_you != null ? `lived with you ${p.months_lived_with_you} months` : '')}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="grid g2 mt16">
+        <div>
+          <div className="small muted mb8">Residency</div>
+          {(h.residency || []).map((r: any) => <div key={r.from} className="small" style={{ padding: '3px 0' }}><b>{r.state}</b> {r.status} · {date(r.from)} – {date(r.to)}</div>)}
+          {P.moves.length > 0 && <div className="small muted mt8">Part-year returns needed for each state left mid-year.</div>}
+        </div>
+        <div>
+          <div className="small muted mb8">Addresses</div>
+          {(h.addresses || []).map((a: any) => <div key={a.from} className="small" style={{ padding: '3px 0' }}>{a.address} <span className="muted">· {a.type} · from {date(a.from)}</span></div>)}
+        </div>
+      </div>
+      <div className="small muted mt12">Prior-year AGI for e-signature: {money(h.prior_year_agi_for_esignature)} · Refund account: <Sensitive text={`${h.bank_account_for_refund_or_payment.bank} ${h.bank_account_for_refund_or_payment.account}`} refName="household:bank" /></div>
+    </>
   )
 }
