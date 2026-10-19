@@ -2,7 +2,7 @@
 
 Every item below is a live **check** in `src/checks.ts`. Each one reads the source documents, client answers or agency records directly and compares its own expected value with the **workpaper** value. Each appears on the Findings page, on its area, on the document page, and as a ⚑ on the line. Most carry a proposed adjustment (one click, undoable, with evidence prefilled). Tax effects use the engine's v3 per-dollar rates or its own what-if results. Positive numbers raise tax.
 
-**Net effect of all fixes:** federal moves from **4,220 owed (engine v3) to about 3,770 refunded**. The California refund grows from **8,256 to about 12,676**.
+**Net effect of all fixes:** federal moves from **4,220 owed (engine v3) to about 3,770 refunded**. The California refund grows from **8,256 to about 11,626**.
 
 ## Engine errors (the engine read the right numbers but did the wrong thing)
 
