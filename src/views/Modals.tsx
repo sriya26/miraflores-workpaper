@@ -62,14 +62,15 @@ export function AdjustModal({ lineKey, onClose, preset }: { lineKey: string; onC
   }
   const eff = useMemo(() => adjustmentEffect(ctx.vix, temp), [delta, fedCat, caCat, customFed, customCa])
   const needsPartner = Math.abs(eff.fed) > 1000 || Math.abs(eff.ca) > 1000
-  const ok = reason.trim().length > 5 && Math.abs(delta) > 0.004
+  const missing = Math.abs(delta) <= 0.004 ? 'Enter a change to record.' : reason.trim().length < 3 ? 'Write why (required) to record.' : ''
+  const ok = !missing
   const submit = () => {
     adjust([{ lineKey, delta, fedCategory: fedCat, caCategory: caCat, customFed: temp.customFed, customCa: temp.customCa, whatIf: preset?.whatIf, reason, evidence }], `Adjusted ${lineKey}`)
     onClose()
   }
   return (
     <Modal title={<>Adjust <span className="mono">{lineKey}</span></>} onClose={onClose}
-      foot={<><span className="small muted grow">The original stays: this records who, why and the tax effect.</span><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok} onClick={submit}>Record adjustment</button></>}>
+      foot={<><span className="small muted grow">{missing || 'The original stays: this records who, why and the tax effect.'}</span><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok} onClick={submit}>Record adjustment</button></>}>
       <div className="small ink2 mb12">{line?.label}</div>
       <div className="row gap12 mb12">
         <div className="stat"><div className="lbl">Engine {ctx.vix.v.version}</div><div className="big">{money(le?.base)}</div></div>

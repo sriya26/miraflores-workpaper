@@ -148,7 +148,7 @@ export function signoffState(ctx: Ctx, areaId: string) {
     if (so && so.fingerprint !== fp.fingerprint) {
       const a = so.snapshot || {}, b = fp.snapshot
       if (a.version !== b.version) changes.push(`engine recomputed ${a.version} → ${b.version}`)
-      for (const k of Object.keys(b.lines)) if (a.lines && a.lines[k] !== b.lines[k] && typeof b.lines[k] === 'number') changes.push(`${k}: ${a.lines[k] ?? '—'} → ${b.lines[k]}`)
+      for (const k of Object.keys(b.lines)) if (a.lines && a.lines[k] !== b.lines[k] && typeof b.lines[k] === 'number') changes.push(`${k}: ${typeof a.lines[k] === "number" ? a.lines[k].toLocaleString() : "—"} → ${b.lines[k].toLocaleString()}`)
       const aa = new Set<string>(a.adjustments || []), bb = new Set<string>(b.adjustments)
       for (const x of bb) if (!aa.has(x)) changes.push(`new adjustment ${String(x).split(':')[0]}`)
       for (const x of aa) if (!bb.has(x)) changes.push(`adjustment removed ${String(x).split(':')[0]}`)
