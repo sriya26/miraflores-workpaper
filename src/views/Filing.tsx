@@ -6,6 +6,7 @@ import { money, date, dateTime, hash, uid, signed, pct } from '../format'
 import { diagnosticsState } from './Findings'
 import { buildResponsePackage, ResponsePackage } from './Examiner'
 import { dependentTins } from '../checks'
+import { finishReviewDemo } from '../demo'
 
 export function returnFingerprint(ctx: Ctx) {
   const parts = AREAS.map(a => areaFingerprint(ctx, a.id).fingerprint).join('|')
@@ -75,7 +76,7 @@ export function Filing() {
       <div className="grid g-side">
         <div className="col gap16">
           <div className="card">
-            <div className="card-head"><h3 className="grow">What's holding the return</h3>{bl.length ? <Badge tone="bad">{bl.length}</Badge> : <Badge tone="ok">nothing</Badge>}</div>
+            <div className="card-head"><h3 className="grow">What's holding the return</h3>{!readyForPartner && ctx.can('view_internal') && !ctx.frozen && <button className="btn sm ghost" title="Demo: does the rest of the review as Priya, Daniel, Helen and the client" onClick={() => finishReviewDemo(ctx.toast)}>Fast-forward the review (demo)</button>}{bl.length ? <Badge tone="bad">{bl.length}</Badge> : <Badge tone="ok">nothing</Badge>}</div>
             <div className="card-body">
               {bl.map((b, i) => <a key={i} href={'#' + (b.go || '/filing')} className="feed-item" style={{ color: 'var(--ink)' }}><Badge tone="muted">{b.kind}</Badge><span className="grow small">{b.text}</span><span className="muted">›</span></a>)}
               {!bl.length && <div className="callout ok">Every finding is resolved, every note closed, every area signed and current.</div>}

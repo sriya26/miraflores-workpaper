@@ -3,6 +3,9 @@
 // It deliberately leaves things open (judgments, partner approvals, a blocking review note).
 
 import type { Ctx } from './ctx'
+import { findingState, signoffState, areaFingerprint } from './ctx'
+import { AREAS } from './areas'
+import { diagnosticsState } from './views/Findings'
 import { append } from './store'
 import { uid } from './format'
 import type { WPEvent } from './model'
@@ -108,4 +111,87 @@ export function seedDemo(ctx: Ctx) {
   mk(P, 'note.create', { id: 'note-cq1', kind: 'client_question', to: 'client', subject: 'Coinhaven lot C6 — original purchase', body: 'Please upload the bank statement page showing the 3,050 payment to CryptoNorth on 03/15/2021.', refs: ['ev-0918', 'msg-07'], blocking: false })
   append(evs)
   ctx.toast({ text: `Loaded ${evs.length} demo events: Priya's verifications and fixes, Daniel's review notes.`, kind: 'ok' })
+}
+
+// "Fast-forward the review": the rest of the season's staff work, so the filing flow (partner
+// sign-off, client 8879, e-file) can be shown without an afternoon of clicking. Every event is
+// attributed to the person who would do it. It runs in phases because each phase needs the
+// recomputed state (fixes change other findings; sign-offs fingerprint the final content).
+export function finishReviewDemo(toast: Ctx['toast']) {
+  const cur = () => (window as any).__wp as Ctx
+  const P = 'st-01', D = 'st-02', H = 'st-03'
+  let total = 0
+  const mk = (actor: string, type: string, payload: any, batch?: string): WPEvent =>
+    ({ id: uid('ev'), type, actor, at: new Date(Date.now() + total++).toISOString(), seasonAt: cur().clock, batch, payload })
+  const later = (fn: () => void) => new Promise<void>(r => setTimeout(() => { fn(); r() }, 250))
+  const applyFixes = () => {
+    const ctx = cur(), evs: WPEvent[] = [], batch = uid('b')
+    for (const c of ctx.checks) {
+      if (c.status !== 'fail' || !c.suggestions.length || !findingState(ctx, c).open) continue
+      for (const sg of c.suggestions) {
+        const base = ctx.eff.lines.get(sg.lineKey)
+        const v = typeof base?.value === 'number' ? base.value : 0
+        const delta = sg.delta ?? (sg.newValue! - v)
+        if (Math.abs(delta) < 0.005) continue
+        evs.push(mk(P, 'adjust', { id: uid('adj'), lineKey: sg.lineKey, baseVersion: ctx.vix.v.version, original: base?.base ?? 0, delta, fedCategory: sg.fedCategory, caCategory: sg.caCategory ?? sg.fedCategory, customFed: sg.customFed, customCa: sg.customCa, whatIf: sg.whatIf, reason: sg.reason, evidence: sg.evidence, checkId: c.id }, batch))
+      }
+    }
+    append(evs)
+    return evs.length
+  }
+  const DECISIONS: Record<string, [string, string, string]> = {
+    'hvac-capitalize': ['judgment', 'Restoration of the HVAC building system: capitalized and depreciated.', 'Reg. 1.263(a)-3(k)'],
+    'sep-excess': ['election', 'Excess SEP contribution withdrawn before the extended due date.', 'IRC 4972; 404(a)(3)'],
+    'due-diligence': ['due_diligence', 'Form 8867 requirements met for both dependents.', 'IRC 6695(g)'],
+    'election-179': ['election', 'Section 179 elected for the equipment.', 'IRC 179'],
+    'ca-amt': ['judgment', 'Schedule P computed off-engine: no California AMT.', 'R&TC 17952'],
+    'outside-filings': ['scope', 'Client advised in writing about filings outside our engagement.', 'Engagement letter D01'],
+  }
+  const closeOut = () => {
+    const ctx = cur(), evs: WPEvent[] = []
+    for (const c of ctx.checks) {
+      if (!findingState(ctx, c).open) continue
+      const d = DECISIONS[c.id]
+      if (d) evs.push(mk(P, 'decision', { id: uid('dec'), kind: d[0], topic: c.title, conclusion: d[1], authority: d[2], refs: [], checkId: c.id }))
+      evs.push(mk(P, 'finding.status', { checkId: c.id, status: d ? 'resolved' : 'accepted', note: d ? d[1] : 'Reviewed; accepted as is.' }))
+    }
+    for (const x of diagnosticsState(ctx)) if (!x.resolved && !x.chk) evs.push(mk(P, 'finding.status', { checkId: 'diag:' + x.d.code, status: 'accepted', note: 'Reviewed; no change needed.' }))
+    const docs = ctx.checks.find(c => c.id === 'docs-accounted')
+    if (docs && docs.status === 'fail') for (const id of docs.evidence) if (ctx.ix.docs.has(id) && !ctx.s.dispositions.get(id)) evs.push(mk(P, 'disposition', { docId: id, status: 'used', reason: 'Values agreed; supports the lines cited in its area.' }))
+    for (const v of ctx.variances) if (![...ctx.s.notes.values()].some(n => n.kind === 'variance' && n.refs.includes(v.key))) evs.push(mk(P, 'note.create', { id: uid('note'), kind: 'variance', subject: `Variance ${v.key}`, body: 'Explained by the adjustments recorded this year.', refs: [v.key], blocking: false }))
+    for (const s of ctx.s.standards.required_steps as string[]) evs.push(mk(P, 'step', { step: s, done: true }))
+    for (const n of ctx.s.notes.values()) {
+      if (n.status === 'resolved' || n.kind === 'variance') continue
+      if (n.kind === 'client_question' && !n.replies.length) evs.push(mk('cu-02', 'note.reply', { noteId: n.id, body: 'Uploaded the statement you asked for.', attachments: [] }))
+      evs.push(mk(D, 'note.resolve', { noteId: n.id, note: 'Resolved.' }))
+    }
+    append(evs)
+  }
+  const approvals = () => {
+    const ctx = cur(), evs: WPEvent[] = []
+    for (const a of ctx.s.adjustments.values()) {
+      if (a.status !== 'active' || a.rejected || a.approvals.some(x => x.level === 'partner')) continue
+      const e = ctx.eff.effects.get(a.id)
+      if (e && (Math.abs(e.fed) > 1000 || Math.abs(e.ca) > 1000) && a.by !== H) evs.push(mk(H, 'adjust.approve', { id: a.id, level: 'partner' }))
+    }
+    append(evs)
+  }
+  const signoffs = (level: 'preparer' | 'reviewer', actor: string) => {
+    const ctx = cur(), evs: WPEvent[] = []
+    for (const a of AREAS) {
+      const x = (signoffState(ctx, a.id) as any)[level]
+      if (x.so && !x.stale) continue
+      const fp = areaFingerprint(ctx, a.id)
+      evs.push(mk(actor, 'signoff', { area: a.id, level, fingerprint: fp.fingerprint, snapshot: fp.snapshot }))
+    }
+    append(evs)
+  }
+  ;(async () => {
+    for (let i = 0; i < 3; i++) { let n = 0; await later(() => { n = applyFixes() }); if (!n) break }
+    await later(closeOut)
+    await later(approvals)
+    await later(() => signoffs('preparer', P))
+    await later(() => signoffs('reviewer', D))
+    toast({ text: `Fast-forwarded the review: ${total} events by Priya, Daniel, Helen and the client. Ready for partner sign-off.`, kind: 'ok' })
+  })()
 }
