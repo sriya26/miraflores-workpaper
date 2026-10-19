@@ -66,21 +66,37 @@ export function DocPage({ doc, page, hl, small, onPick, reveal, mode = 'form' }:
   const { fields, table } = useMemo(() => layoutFields(evs), [doc.id, page])
   useEffect(() => { if (hl && !small) document.getElementById('fc-' + hl)?.scrollIntoView({ block: 'nearest' }) }, [hl, page])
   const corrected = (e: ExtractedValue) => ctx.s.corrections.get(e.id)
-  if (mode === 'positions' || !evs.length) {
-    // Overlay mode: what a real scan would look like - the printed page with each extracted value
-    // boxed at the pipeline's reported coordinates.
+  if (!evs.length) {
+    // Nothing extracted from this page: show the printed text.
     return (
       <div className="docpage" style={small ? { fontSize: 10 } : undefined}>
         <div className="doc-hdr"><span>{doc.issuer}</span><span>{doc.file_name}</span></div>
         {doc.marked_corrected && <div className="stamp">CORRECTED</div>}
-        <div className="paper" style={{ fontSize: small ? 9 : text.length > 1400 ? 10.5 : 12.5, lineHeight: 1.55, overflowY: 'auto' }}>{highlightText(text, hl && ctx.ix.evs.get(hl) && !isSensitiveType(ctx.ix.evs.get(hl)!.value_type) ? ctx.ix.evs.get(hl)!.text_as_read : undefined)}</div>
-        {evs.map(e => (
-          <div key={e.id} className={'hlbox' + (e.id === hl ? ' on' : '') + (e.confidence < 0.8 ? ' low' : '')} title={`${e.label}: ${show(e)}`} onClick={() => pick(e.id)}
-            style={{ left: `${e.position.x0 * 100}%`, top: `${e.position.y0 * 100}%`, width: `${(e.position.x1 - e.position.x0) * 100}%`, height: `${(e.position.y1 - e.position.y0) * 100}%`, opacity: hl && e.id !== hl ? 0.3 : 1 }}>
+        <div className="paper" style={{ fontSize: small ? 9 : text.length > 1400 ? 10.5 : 12.5, lineHeight: 1.55, overflowY: 'auto' }}>{text}</div>
+        <div className="doc-ftr"><span>{doc.id} · not extracted — printed text</span><span>page {page} of {doc.page_count}</span></div>
+      </div>
+    )
+  }
+  if (mode === 'positions') {
+    // Overlay mode: each value drawn at the coordinates the pipeline reported. There is no page
+    // image in this packet (its positions are synthetic), so the box carries its own text; with a
+    // real scan from pageSource() the same boxes would sit on the printed value.
+    return (
+      <div className="docpage" style={small ? { fontSize: 10 } : undefined}>
+        <div className="doc-hdr"><span>{doc.issuer}</span><span>{doc.file_name}</span></div>
+        {doc.marked_corrected && <div className="stamp">CORRECTED</div>}
+        {evs.map(e => {
+          // a busy page shows outlines only, with text for the selected value; hover names the rest
+          const label = e.id === hl || evs.length <= 25
+          return (
+          <div key={e.id} className={'hlbox' + (label ? ' field' : '') + (e.id === hl ? ' on' : '') + (e.confidence < 0.8 ? ' low' : '')} title={`${e.label}: ${show(e)} · ${Math.round(e.confidence * 100)}%`} onClick={() => pick(e.id)}
+            style={{ left: `${e.position.x0 * 100}%`, top: `${e.position.y0 * 100}%`, width: `${(e.position.x1 - e.position.x0) * 100}%`, height: `${(e.position.y1 - e.position.y0) * 100}%`, opacity: hl && e.id !== hl ? (label ? 0.35 : 0.5) : 1 }}>
+            {label && <div className="fval">{show(e)}</div>}
             {e.id === hl && !small && <span className="tag">{e.field}</span>}
           </div>
-        ))}
-        <div className="doc-ftr"><span>{doc.id} · {evs.length ? 'positions as reported by the pipeline' : 'not extracted — printed text'}</span><span>page {page} of {doc.page_count}</span></div>
+          )
+        })}
+        <div className="doc-ftr"><span>{doc.id} · positions as reported (synthetic in this packet)</span><span>page {page} of {doc.page_count}</span></div>
       </div>
     )
   }
@@ -165,7 +181,7 @@ export function DocumentView({ id, page, hl }: { id: string; page: number; hl?: 
             <select value={pg} onChange={e => setPage(+e.target.value)}>{doc.pages.map(p => <option key={p.page} value={p.page}>Page {p.page}</option>)}</select>
             <button className="btn sm" disabled={pg >= doc.page_count} onClick={() => setPage(pg + 1)}>Next ›</button>
             <span className="spacer" />
-            {evs.length > 0 && <div className="pill-toggle" title="Form: the page rebuilt from extracted fields. Positions: the printed text with each value boxed where the pipeline reported it — how a real scan would be overlaid."><button className={mode === 'form' ? 'on' : ''} onClick={() => setMode('form')}>Form</button><button className={mode === 'positions' ? 'on' : ''} onClick={() => setMode('positions')}>Positions</button></div>}
+            {evs.length > 0 && <div className="pill-toggle" title="Form: the page rebuilt from extracted fields. Positions: each value drawn where the pipeline reported it — how highlights would sit on a real scan."><button className={mode === 'form' ? 'on' : ''} onClick={() => setMode('form')}>Form</button><button className={mode === 'positions' ? 'on' : ''} onClick={() => setMode('positions')}>Positions</button></div>}
             {hasSensitive && (ctx.can('view_sensitive')
               ? <button className="btn sm" onClick={() => { if (!reveal) ctx.emit('access', { ref: id, what: `unmasked document page ${pg}` }); setReveal(!reveal) }}>{reveal ? 'Mask sensitive data' : '👁 Unmask (logged)'}</button>
               : <Badge tone="muted">sensitive data masked</Badge>)}
