@@ -7,6 +7,16 @@ A web-native tax workpaper for one complex household: click any number to see wh
 - **Approach, decisions, tools:** [docs/03-approach-decisions-and-tools.md](docs/03-approach-decisions-and-tools.md)
 - **Video script:** [docs/04-video-walkthrough-script.md](docs/04-video-walkthrough-script.md)
 
+## Try it
+
+**Live:** https://miraflores-workpaper-one.vercel.app/ — shared by everyone with the link (work syncs within a few seconds).
+
+- Switch people with the name menu (top right): preparer, reviewer, partner, a preparer without clearance, the firm administrator, the quality reviewer, both clients and the IRS examiner.
+- **Load a morning of demo work** (Overview) adds a realistic review in progress.
+- **Fast-forward the review (demo)** (Review & filing) does the remaining staff work, attributed per person, so the partner sign-off, client 8879, e-file (including the rejection if Theo's SSN isn't corrected), freeze and amendment can be shown quickly.
+- **Reset to the packet as delivered** (bottom of the Overview) clears all work for everyone.
+- The season clock (top bar) replays the packet's timeline, up to the 2028 IRS letter.
+
 ## Run locally
 
 ```bash
