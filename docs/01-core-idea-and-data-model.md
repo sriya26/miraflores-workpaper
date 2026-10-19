@@ -28,4 +28,3 @@ Workpaper return = engine version at the clock + active adjustments
 - **Roles are enforced, not hidden.** Every write goes through `can(user, action)`. Nobody reviews their own work, sensitive values are masked and each reveal is logged, and staff who haven't started yet are read-only. The client and the IRS examiner see only their own screens.
 - **Runs on any packet.** The household, the document grouping and the core checks are derived from the packet by form type and field name. A test renumbers every ID and the same findings appear.
 
-- 
