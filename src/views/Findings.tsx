@@ -111,6 +111,7 @@ export function Findings({ focus }: { focus?: string }) {
 export function FindingCard({ c, st, est, selected, onSelect, focus, compact }: { c: CheckResult; st: any; est: { fed: number; ca: number }; selected?: boolean; onSelect?: (v: boolean) => void; focus?: boolean; compact?: boolean }) {
   const ctx = useCtx()
   const [open, setOpen] = useState(!compact || focus)
+  useEffect(() => { if (focus) setOpen(true) }, [focus])
   const [dec, setDec] = useState(false)
   const [q, setQ] = useState(false)
   const adjust = useAdjust()
